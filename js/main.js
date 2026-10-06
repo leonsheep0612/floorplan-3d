@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import * as P from './plan.js?v=10';
-import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=10';
+import * as P from './plan.js?v=11';
+import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=11';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -481,7 +481,7 @@ const newId = () => 'f' + (uid++).toString(36) + Date.now().toString(36).slice(-
 
 function makeItem(type, x, z, extra = {}) {
   const def = CATALOG[type];
-  return { id: newId(), type, x, z, w: def.w, d: def.d, h: def.h, rot: 0, elev: def.elev || 0, color: def.color, color2: def.color2 || null, name: def.name, ...extra };
+  return { id: newId(), type, x, z, w: def.w, d: def.d, h: def.h, rot: 0, elev: def.elev || 0, color: def.color, color2: def.color2 || null, name: def.name, ...(def.openable ? { open: def.open } : {}), ...extra };
 }
 function defaultLayout() {
   return P.DEFAULT_LAYOUT.map(f => {
@@ -554,7 +554,7 @@ function commit(save = true) {
   updatePlanState();
 }
 function persist() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 5, items })); } catch { /* 私密模式等 */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 6, items })); } catch { /* 私密模式等 */ }
 }
 function restore(i) {
   hIndex = i;
@@ -584,6 +584,8 @@ function select(id) {
   $('#pColor').value = it.color || def.color;
   $('#pColor2Row').hidden = !def.color2;
   $('#pSw2Row').hidden = !def.color2;
+  $('#pOpenRow').hidden = !def.openable;
+  if (def.openable) { $('#pOpen').value = it.open ?? def.open; $('#pOpenVal').textContent = (it.open ?? def.open) + '%'; }
   $('#pPhotoRow').hidden = !it.type.startsWith('art_') || it.type === 'art_triptych';
   $('#pPhotoClear').hidden = !it.img;
   const same = Object.entries(CATALOG).filter(([, d]) => d.cat === def.cat);
@@ -646,7 +648,11 @@ $('#pStyle').addEventListener('change', e => {
   if (!def) return;
   updateSel(it => {
     const keepName = it.name && it.name !== CATALOG[it.type].name;
+    const prevCat = CATALOG[it.type].cat, prevW = it.w;
     Object.assign(it, { type: t, w: def.w, d: def.d, h: def.h, color: def.color, color2: def.color2 || null, elev: def.elev ?? it.elev ?? 0 });
+    if (def.openable) it.open = def.open; else delete it.open;
+    // 窗簾換款式時保留寬度（已依窗戶量好）
+    if (def.cat === '窗簾' && prevCat === '窗簾') it.w = prevW;
     if (!keepName) it.name = def.name;
   }, true);
   select(selId); commit();
@@ -661,6 +667,8 @@ for (const [id, key, min] of [['#pW', 'w', 5], ['#pD', 'd', 1], ['#pH', 'h', 1]]
 $('#pElev').addEventListener('change', e => { const v = Math.max(0, Math.min(250, +e.target.value || 0)); e.target.value = v; updateSel(it => it.elev = v, true); commit(); });
 $('#pRot').addEventListener('input', e => { updateSel(it => it.rot = normRot(+e.target.value)); $('#pRotVal').textContent = e.target.value + '°'; });
 $('#pRot').addEventListener('change', () => commit());
+$('#pOpen').addEventListener('input', e => { updateSel(it => { it.open = +e.target.value; }, true); $('#pOpenVal').textContent = e.target.value + '%'; });
+$('#pOpen').addEventListener('change', () => commit());
 $('#pColor').addEventListener('input', e => updateSel(it => it.color = e.target.value, true));
 $('#pColor').addEventListener('change', () => commit());
 $('#pColor2').addEventListener('input', e => updateSel(it => it.color2 = e.target.value, true));
@@ -1168,7 +1176,7 @@ let toastT;
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
 
 // ── 分享連結編碼 ─────────────────────────────────────────
-const KEYS = ['type', 'x', 'z', 'w', 'd', 'h', 'rot', 'elev', 'color', 'color2', 'name'];
+const KEYS = ['type', 'x', 'z', 'w', 'd', 'h', 'rot', 'elev', 'color', 'color2', 'name', 'open'];
 function sanitize(o) {
   if (!o || !CATALOG[o.type]) return null;
   const def = CATALOG[o.type], num = (v, d) => (Number.isFinite(+v) ? +v : d);
@@ -1176,6 +1184,7 @@ function sanitize(o) {
   const color2 = /^#[0-9a-f]{6}$/i.test(o.color2) ? o.color2 : (def.color2 || null);
   return { id: newId(), type: o.type, x: num(o.x, CX), z: num(o.z, CZ), w: num(o.w, def.w), d: num(o.d, def.d), h: num(o.h, def.h),
     rot: normRot(num(o.rot, 0)), elev: num(o.elev, 0), color, color2, name: String(o.name ?? def.name).slice(0, 40),
+    ...(def.openable ? { open: Math.max(0, Math.min(100, num(o.open, def.open))) } : {}),
     ...(typeof o.img === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(o.img) && o.img.length < 600000 ? { img: o.img } : {}) };
 }
 async function encodeLayout(list) {
@@ -1200,7 +1209,7 @@ async function decodeLayout(code) {
   const parsed = JSON.parse(await new Response(stream).text());
   const rows = Array.isArray(parsed) ? parsed : parsed.i;
   sharedWalls = Array.isArray(parsed) ? null : sanitizePaints(parsed.w);
-  return rows.map(r => { const o = {}; KEYS.forEach((k, i) => { if (r[i] !== 0 || ['x', 'z', 'rot', 'elev'].includes(k)) o[k] = r[i]; }); return sanitize(o); }).filter(Boolean);
+  return rows.map(r => { const o = {}; KEYS.forEach((k, i) => { if (r[i] !== 0 || ['x', 'z', 'rot', 'elev', 'open'].includes(k)) o[k] = r[i]; }); return sanitize(o); }).filter(Boolean);
 }
 
 // ── 方案 ─────────────────────────────────────────────────
@@ -1390,6 +1399,8 @@ async function init() {
         if (old) list[list.indexOf(old)] = dl.find(it => it.type === 'boaxel');
         if (!list.some(it => it.type === 'track_light')) list.push(...dl.filter(it => it.type === 'track_light'));
       }
+      // v6 加入窗簾（客廳一紗一布、主臥全遮光）
+      if ((s.v || 1) < 6 && !list.some(it => CATALOG[it.type].cat === '窗簾')) list.push(...defaultLayout().filter(it => CATALOG[it.type].cat === '窗簾'));
       // v4 衣櫃改為開放式，並加入人形身高參考
       if ((s.v || 1) < 4) {
         const dl = defaultLayout();

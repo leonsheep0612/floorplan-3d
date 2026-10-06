@@ -6,7 +6,7 @@
 <title>無印風公寓 3D 擺設</title>
 <meta name="description" content="依平面圖建立的 3D 户型，可自由擺放、移動、旋轉家具。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='3' fill='%23f3f0ea' stroke='%2356575a' stroke-width='3'/%3E%3Cpath d='M16 3v14h13M3 19h8' stroke='%2356575a' stroke-width='3' fill='none'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=10">
+<link rel="stylesheet" href="css/style.css?v=11">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -119,6 +119,11 @@
       <label>深<input id="pD" type="number" min="1" max="1000" step="1"><i>cm</i></label>
       <label>高<input id="pH" type="number" min="1" max="1000" step="1"><i>cm</i></label>
       <label>離地<input id="pElev" type="number" min="0" max="250" step="1"><i>cm</i></label>
+    </div>
+    <div class="row" id="pOpenRow">
+      <span class="lbl">開合</span>
+      <input id="pOpen" type="range" min="0" max="100" step="5">
+      <output id="pOpenVal">0%</output>
     </div>
     <div class="row">
       <span class="lbl">旋轉</span>
@@ -249,6 +254,8 @@
       <h4>地毯與牆面裝飾</h4>
       <p><b>「地毯」</b> 分類有素面、邊框、條紋、摩洛哥菱格、長毛、黃麻圓毯、色塊圖樣與走道長毯，主色是底色、配色是花紋色。<b>「牆面裝飾」</b> 分類有多種掛畫（抽象、拱形、線條、山景、包浩斯、植物、三聯幅）、圓鏡、拱形落地鏡、壁掛層板與掛鐘：主色改變畫作色調、配色是畫框顏色，「離地」是畫框底部高度。拖到牆邊會自動貼牆。</p>
       <p>點選掛畫後按 <b>「換成我的照片…」</b> 可以放自己的照片或畫作（只存在這個瀏覽器與匯出檔，分享連結不會包含照片）。</p>
+      <h4>窗簾</h4>
+      <p><b>「窗簾」</b> 分類有一紗一布、全遮光、全遮光＋長虹玻璃貼、調光簾（斑馬簾），以及單獨的長虹玻璃貼。預設客廳是一紗一布（跨陽台落地窗與窗戶）、主臥是全遮光；點選窗簾後用 <b>「款式」</b> 就能換成其他種，寬度會保留。<b>「開合」</b> 滑桿調整拉開程度（調光簾為捲起程度）。主色＝布簾／簾片顏色，配色＝白紗或遮光內襯顏色。</p>
       <h4>牆面油漆（特殊漆）</h4>
       <p>畫面左上的 <b>「🖌 牆面油漆」</b> 開啟後，選顏色與漆種（平光乳膠漆、礦物石灰漆、微水泥、清水模漆、珠光藝術漆），再點牆面就會刷上；同一平面相連的牆段會一起刷。「橡皮擦」可還原單面牆、「全部還原」恢復白牆。牆色會跟著方案、分享連結與匯出檔一起儲存。</p>
       <p>冰箱、櫃子等家具的顏色則是點選家具後，在屬性面板用色盤或色票調整。</p>
@@ -358,6 +365,6 @@
 <div id="toast" class="toast" role="status"></div>
 <div class="loading" id="loading"><span></span>載入 3D 場景…</div>
 
-<script type="module" src="js/main.js?v=10"></script>
+<script type="module" src="js/main.js?v=11"></script>
 </body>
 </html>

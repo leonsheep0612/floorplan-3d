@@ -82,6 +82,9 @@ export const DEFAULT_LAYOUT = [
   { t: 'shelf_thin', c: [646, 645], rot: -90, w: 260, name: '展示薄櫃' },
   { t: 'dining_table', c: [522, 650] },
   { t: 'pendant', c: [522, 650], name: '餐廳吊燈' },
+  // 窗簾：客廳一紗一布（覆蓋陽台落地窗與窗戶）、主臥全遮光
+  { t: 'curtain_sheer', c: [695, 187.5], w: 430, name: '客廳窗簾（一紗一布）' },
+  { t: 'curtain_blackout', c: [1040, 187.5], w: 200, name: '主臥窗簾（全遮光）' },
   // 天花板軌道燈（客廳方框、餐廚一條、主臥一條）
   { t: 'track_light', c: [670, 240], w: 360 },
   { t: 'track_light', c: [670, 450], w: 360 },

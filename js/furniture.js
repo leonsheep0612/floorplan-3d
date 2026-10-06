@@ -864,6 +864,91 @@ function wallClock({ w, d, h, color, color2 }) {
   return g;
 }
 
+
+// ── 窗簾（背面貼牆 -Z；open 0–100：拉開程度）────────────────────
+// 波浪褶布片：寬 width、高 height，褶數依寬度
+function wavePanel(width, height, m, amp = 3.2, pitch = 14) {
+  const segs = Math.max(8, Math.round(width / 3));
+  const geo = new THREE.PlaneGeometry(width, height, segs, 1);
+  const pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) pos.setZ(i, Math.sin((pos.getX(i) / pitch) * Math.PI * 2) * amp);
+  geo.computeVertexNormals();
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.castShadow = m.opacity >= 1; mesh.receiveShadow = true;
+  return mesh;
+}
+function curtainTrack(g, w, h, d, color = '#e9e9e6') {
+  B(g, w + 6, 3, 5, 0, h - 3, -d / 2 + 4, mat(color, { r: 0.4, m: 0.2 }), 0.5, false);
+}
+// 布簾：兩片往兩側收，open=0 全關、100 全開（收成約 18% 堆疊寬）
+function drapes(g, w, h, d, z, m, open, lining) {
+  const stack = Math.max(18, w * 0.09), half = w / 2;
+  const pw = Math.max(stack, half * (1 - open / 100) + stack * (open / 100));
+  for (const s of [-1, 1]) {
+    const comp = Math.max(1, (half * 0.9) / pw); // 收攏時褶更密
+    const p = wavePanel(pw, h - 6, m, 3 + comp * 0.8, 14 / Math.min(comp, 2.2));
+    p.position.set(s * (half - pw / 2), (h - 6) / 2, z);
+    g.add(p);
+    if (lining) { const l = wavePanel(pw, h - 6, lining, 3 + comp * 0.8, 14 / Math.min(comp, 2.2)); l.position.set(s * (half - pw / 2), (h - 6) / 2, z - 1.2); g.add(l); }
+  }
+}
+// 一紗一布：後層白紗（常關）、前層布簾
+function curtainSheer({ w, d, h, color, color2, open }) {
+  const g = new THREE.Group();
+  curtainTrack(g, w, h, d);
+  const sheer = new THREE.MeshStandardMaterial({ color: color2, transparent: true, opacity: 0.42, roughness: 0.9, side: THREE.DoubleSide, depthWrite: false });
+  const sp = wavePanel(w, h - 6, sheer, 2.2, 9); sp.position.set(0, (h - 6) / 2, -d / 2 + 4); g.add(sp);
+  drapes(g, w, h, d, d / 2 - 4, mat(color, { r: 0.95, ds: true }), open ?? 70);
+  return g;
+}
+// 全遮光：布簾＋背面遮光內襯
+function curtainBlackout({ w, d, h, color, color2, open }) {
+  const g = new THREE.Group();
+  curtainTrack(g, w, h, d);
+  drapes(g, w, h, d, d / 2 - 4, mat(color, { r: 0.97, ds: true }), open ?? 30, mat(color2, { r: 0.9, ds: true }));
+  return g;
+}
+// 長虹玻璃貼：直條紋霧面半透明片（貼在窗玻璃上，elev＝窗台高）
+function reededPanel(w, h, color) {
+  const tex = canvasTexture(['reed', color].join('|'), 256, 16, (x, W, H) => {
+    for (let i = 0; i < W; i += 8) {
+      const gr = x.createLinearGradient(i, 0, i + 8, 0);
+      gr.addColorStop(0, 'rgba(170,178,180,0.75)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.95)'); gr.addColorStop(1, 'rgba(150,158,160,0.8)');
+      x.fillStyle = gr; x.fillRect(i, 0, 8, H);
+    }
+  });
+  const t = tex.clone(); t.needsUpdate = true; t.wrapS = THREE.RepeatWrapping; t.repeat.set(Math.max(1, w / 64), 1);
+  const m = new THREE.MeshStandardMaterial({ color, map: t, transparent: true, opacity: 0.8, roughness: 0.35, side: THREE.DoubleSide, depthWrite: false });
+  return new THREE.Mesh(new THREE.PlaneGeometry(w, h), m);
+}
+function glassFilm({ w, d, h, color }) {
+  const g = new THREE.Group(), p = reededPanel(w, h, color);
+  p.position.set(0, h / 2, -d / 2 + 0.5); g.add(p);
+  return g;
+}
+// 全遮光＋長虹玻璃貼：玻璃貼覆蓋窗戶（窗台 32cm 起），前方全遮光布簾
+function curtainBlackoutReeded(o) {
+  const g = curtainBlackout(o);
+  const fh = Math.min(o.h - 40, 184), p = reededPanel(Math.max(20, o.w - 40), fh, '#f4f6f6');
+  p.position.set(0, 32 + fh / 2, -o.d / 2 + 0.6); g.add(p);
+  return g;
+}
+// 調光簾（斑馬簾）：上方捲盒，布面為透光／遮光橫條交錯；open＝捲起比例
+function zebraBlind({ w, d, h, color, open }) {
+  const g = new THREE.Group();
+  const drop = Math.max(10, (h - 10) * (1 - (open ?? 0) / 100));
+  B(g, w + 2, 9, 9, 0, h - 9, -d / 2 + 5, mat('#f1f0ec', { r: 0.4 }), 1.5, false);
+  const tex = canvasTexture(['zebra', color].join('|'), 16, 256, (x, W, H) => {
+    const c = new THREE.Color(color), rgb = `${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)}`;
+    for (let y = 0; y < H; y += 32) { x.fillStyle = `rgba(${rgb},0.98)`; x.fillRect(0, y, W, 17); x.fillStyle = `rgba(${rgb},0.35)`; x.fillRect(0, y + 17, W, 15); }
+  });
+  const t = tex.clone(); t.needsUpdate = true; t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, Math.max(1, drop / 60));
+  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(w, drop), new THREE.MeshStandardMaterial({ color: '#ffffff', map: t, transparent: true, roughness: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+  sheet.position.set(0, h - 9 - drop / 2, -d / 2 + 6); g.add(sheet);
+  B(g, w, 3, 3, 0, h - 9 - drop - 1.5, -d / 2 + 6, mat('#e5e3de', { r: 0.4 }), 1, false);
+  return g;
+}
+
 // 人形：身高參考
 function person({ w, d, h, color }) {
   const g = new THREE.Group(), m = mat(color, { r: 0.7 }), s = h / 170;
@@ -1060,7 +1145,7 @@ function pendant({ w, d, h, color, elev }) {
 
 // ── 目錄 ────────────────────────────────────────────────
 export const CEIL_H = 278;
-export const CATEGORIES = ['沙發', '單人椅', '客廳', '地毯', '牆面裝飾', '書桌', '書櫃・層架', '燈具', '臥室', '餐廚', '衛浴', '收納', '書房・其他'];
+export const CATEGORIES = ['沙發', '單人椅', '客廳', '地毯', '牆面裝飾', '窗簾', '書桌', '書櫃・層架', '燈具', '臥室', '餐廚', '衛浴', '收納', '書房・其他'];
 
 export const CATALOG = {
   sofa:          sofaDef('三人沙發（圓扶手）', 240, 88, 80, '#e6ddcd', '#6b4f36', { arm: 22, armH: 62, legH: 10, seatH: 44, backD: 20, n: 3, round: 9, rollArm: true }),
@@ -1094,6 +1179,12 @@ export const CATALOG = {
   tv:            { name: '電視 65吋', cat: '客廳', w: 145, d: 6, h: 84, color: '#1d1d1f', build: tv },
   rug:           { name: '素面地毯', cat: '地毯', w: 200, d: 140, h: 1, color: '#e9e2d6', build: rug },
   rug_round:     { name: '圓地毯', cat: '地毯', w: 120, d: 120, h: 1, color: '#c8b59a', build: rugRound },
+  // 窗簾（open＝拉開程度 0–100）
+  curtain_sheer:   { name: '一紗一布窗簾', cat: '窗簾', w: 200, d: 15, h: 270, open: 70, openable: true, color: '#cfc6b6', color2: '#fbfaf6', build: curtainSheer },
+  curtain_blackout:{ name: '全遮光窗簾', cat: '窗簾', w: 200, d: 15, h: 270, open: 30, openable: true, color: '#8f8a83', color2: '#f1efea', build: curtainBlackout },
+  curtain_reeded:  { name: '全遮光＋長虹玻璃貼', cat: '窗簾', w: 200, d: 15, h: 270, open: 40, openable: true, color: '#8f8a83', color2: '#f1efea', build: curtainBlackoutReeded },
+  zebra_blind:     { name: '調光簾（斑馬簾）', cat: '窗簾', w: 160, d: 12, h: 220, open: 0, openable: true, color: '#e6e1d8', build: zebraBlind },
+  glass_film:      { name: '長虹玻璃貼（單獨）', cat: '窗簾', w: 150, d: 2, h: 184, elev: 32, color: '#f4f6f6', build: glassFilm },
   // 地毯
   rug_border:    { name: '邊框地毯', cat: '地毯', w: 200, d: 140, h: 1, color: '#e6ddcc', color2: '#8a7563', build: o => rugStyled(o, 'border') },
   rug_stripe:    { name: '條紋地毯', cat: '地毯', w: 200, d: 140, h: 1, color: '#ece6da', color2: '#5d6b7a', build: o => rugStyled(o, 'stripe') },
@@ -1182,7 +1273,7 @@ export const CATALOG = {
 
 export function buildFurniture(it) {
   const def = CATALOG[it.type];
-  const o = { w: it.w, d: it.d, h: it.h, elev: it.elev || 0, color: it.color || def.color, color2: it.color2 || def.color2 || '#888888', img: it.img || null };
+  const o = { w: it.w, d: it.d, h: it.h, elev: it.elev || 0, color: it.color || def.color, color2: it.color2 || def.color2 || '#888888', img: it.img || null, open: it.open ?? def.open };
   const g = def.build(o);
   g.traverse(m => { if (m.isMesh) m.userData.fid = it.id; });
   return g;
