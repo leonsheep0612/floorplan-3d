@@ -342,3 +342,6 @@ body[data-mode="3d"] .ceil-chk, body[data-mode="top"] .ceil-chk { display: none;
   .paint-panel { left: 0; right: 0; top: auto; bottom: 0; width: auto; border-radius: 16px 16px 0 0; transform: translateY(105%); padding-bottom: env(safe-area-inset-bottom); }
   .paint-mode .paint-panel { transform: none; }
 }
+
+#pPhotoRow[hidden], #pPhotoClear[hidden] { display: none; }
+#pPhoto { padding: 4px 10px; font-size: 12.5px; }

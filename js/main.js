@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import * as P from './plan.js?v=9';
-import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=9';
+import * as P from './plan.js?v=10';
+import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=10';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -584,6 +584,8 @@ function select(id) {
   $('#pColor').value = it.color || def.color;
   $('#pColor2Row').hidden = !def.color2;
   $('#pSw2Row').hidden = !def.color2;
+  $('#pPhotoRow').hidden = !it.type.startsWith('art_') || it.type === 'art_triptych';
+  $('#pPhotoClear').hidden = !it.img;
   const same = Object.entries(CATALOG).filter(([, d]) => d.cat === def.cat);
   const sel = $('#pStyle');
   sel.innerHTML = same.map(([k, d]) => `<option value="${k}">${d.name}　${d.w}×${d.d}</option>`).join('');
@@ -601,6 +603,29 @@ function updateSel(fn, rebuild = false) {
 }
 const normRot = r => ((Math.round(r) % 360) + 360) % 360;
 
+// 掛畫換成自己的照片（縮到 800px 以內存成 JPEG；分享連結不含照片）
+$('#pPhoto').onclick = () => $('#photoFile').click();
+$('#photoFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = '';
+  if (!f) return;
+  try {
+    const url = URL.createObjectURL(f), im = new Image();
+    await new Promise((ok, bad) => { im.onload = ok; im.onerror = bad; im.src = url; });
+    const k = Math.min(1, 800 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+    c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+    const data = c.toDataURL('image/jpeg', 0.82);
+    updateSel(it => {
+      it.img = data;
+      // 依照片比例調整畫框高度，寬度不變
+      const pad = it.type === 'art_landscape' || it.type === 'art_bauhaus' ? 0.07 : 0.25;
+      it.h = Math.round(it.w * (c.height / c.width) * (1 - pad) + it.w * pad);
+    }, true);
+    select(selId); commit();
+    toast('已換成你的照片（分享連結不會包含照片，匯出 JSON 會）');
+  } catch { toast('照片讀取失敗'); }
+};
+$('#pPhotoClear').onclick = () => { updateSel(it => { delete it.img; }, true); select(selId); commit(); };
 // 常用色票：點一下套用到主色／配色
 const SWATCHES = [
   ['#efe9df', '米白'], ['#e3e1dc', '灰白'], ['#c9c9c6', '淺灰'], ['#8f9497', '灰'], ['#4a4b4d', '深灰'], ['#232323', '黑'],
@@ -1150,7 +1175,8 @@ function sanitize(o) {
   const color = /^#[0-9a-f]{6}$/i.test(o.color) ? o.color : def.color;
   const color2 = /^#[0-9a-f]{6}$/i.test(o.color2) ? o.color2 : (def.color2 || null);
   return { id: newId(), type: o.type, x: num(o.x, CX), z: num(o.z, CZ), w: num(o.w, def.w), d: num(o.d, def.d), h: num(o.h, def.h),
-    rot: normRot(num(o.rot, 0)), elev: num(o.elev, 0), color, color2, name: String(o.name ?? def.name).slice(0, 40) };
+    rot: normRot(num(o.rot, 0)), elev: num(o.elev, 0), color, color2, name: String(o.name ?? def.name).slice(0, 40),
+    ...(typeof o.img === 'string' && /^data:image\/(jpeg|png|webp);base64,/.test(o.img) && o.img.length < 600000 ? { img: o.img } : {}) };
 }
 async function encodeLayout(list) {
   const rows = list.map(it => KEYS.map(k => {

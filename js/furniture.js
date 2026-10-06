@@ -665,6 +665,205 @@ function pendantStyled({ w, d, h, color, color2, elev }, s) {
   return g;
 }
 
+
+// ── 軟裝：地毯與牆面裝飾（圖樣用 canvas 繪製，顏色跟著主色／配色）──────────
+const texCache = new Map();
+function canvasTexture(key, wPx, hPx, draw) {
+  if (texCache.has(key)) return texCache.get(key);
+  const c = document.createElement('canvas'); c.width = wPx; c.height = hPx;
+  draw(c.getContext('2d'), wPx, hPx);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
+  texCache.set(key, t);
+  return t;
+}
+const seeded = s => () => (s = (s * 16807) % 2147483647) / 2147483647;
+const hexMix = (a, b, t) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
+
+// 地毯：style = border | stripe | berber | shag | jute | blob
+function rugStyled({ w, d, h, color, color2 }, style) {
+  const g = new THREE.Group(), round = style === 'jute';
+  const px = 512, py = Math.max(64, Math.round(512 * d / w));
+  const tex = canvasTexture(['rug', style, color, color2, w, d].join('|'), px, round ? 512 : py, (x, W, H) => {
+    const r = seeded(17);
+    x.fillStyle = color; x.fillRect(0, 0, W, H);
+    if (style === 'border') {
+      x.strokeStyle = color2; x.lineWidth = W * 0.022; x.strokeRect(W * 0.05, H * 0.07, W * 0.9, H * 0.86);
+      x.lineWidth = W * 0.008; x.strokeRect(W * 0.09, H * 0.13, W * 0.82, H * 0.74);
+    } else if (style === 'stripe') {
+      const n = 9;
+      for (let i = 0; i < n; i++) if (i % 2) { x.fillStyle = i % 4 === 1 ? color2 : hexMix(color, color2, 0.45); x.fillRect((W / n) * i, 0, W / n * (i % 4 === 1 ? 0.6 : 0.35), H); }
+    } else if (style === 'berber') {
+      x.strokeStyle = color2; x.lineWidth = 3.5;
+      const s = W / 7;
+      for (let i = -2; i < 10; i++) for (let j = -2; j < Math.ceil(H / s) + 2; j++) {
+        const cx = i * s + (j % 2 ? s / 2 : 0), cy = j * s * 0.85;
+        x.beginPath(); x.moveTo(cx, cy - s * 0.42); x.lineTo(cx + s * 0.32, cy); x.lineTo(cx, cy + s * 0.42); x.lineTo(cx - s * 0.32, cy); x.closePath(); x.stroke();
+      }
+    } else if (style === 'jute') {
+      for (let rr = W / 2; rr > 4; rr -= 9) { x.strokeStyle = rr % 18 < 9 ? hexMix(color, '#000000', 0.12) : hexMix(color, '#ffffff', 0.08); x.lineWidth = 5; x.beginPath(); x.arc(W / 2, W / 2, rr, 0, Math.PI * 2); x.stroke(); }
+    } else if (style === 'shag') {
+      for (let i = 0; i < 9000; i++) { x.fillStyle = r() > 0.5 ? hexMix(color, '#ffffff', 0.18) : hexMix(color, '#000000', 0.12); x.fillRect(r() * W, r() * H, 2, 2); }
+    } else if (style === 'blob') {
+      for (let i = 0; i < 6; i++) {
+        x.fillStyle = [color2, hexMix(color, color2, 0.5), hexMix(color, '#ffffff', 0.25)][i % 3];
+        x.beginPath(); x.ellipse(r() * W, r() * H, W * (0.08 + r() * 0.14), H * (0.08 + r() * 0.16), r() * 3, 0, Math.PI * 2); x.fill();
+      }
+    }
+  });
+  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 1 });
+  const th = Math.max(h, style === 'shag' ? 3 : 0.8);
+  let mesh;
+  if (round) { mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, th, 64), m); mesh.scale.set(w, 1, d); }
+  else mesh = new THREE.Mesh(new RoundedBoxGeometry(w, th, d, 2, Math.min(th / 2 - 0.01, 0.4)), m);
+  mesh.position.y = th / 2; mesh.receiveShadow = true;
+  g.add(mesh);
+  return g;
+}
+
+// 畫作圖樣：style = abstract | arch | line | landscape | bauhaus | botanical
+function drawArt(x, W, H, style, color, seed = 3) {
+  const r = seeded(seed * 31 + 7);
+  const paper = '#f3efe7', dark = '#2f2c28';
+  const c1 = color, c2 = hexMix(color, '#ffffff', 0.45), c3 = hexMix(color, '#000000', 0.35), mustard = '#d1a54a';
+  x.fillStyle = paper; x.fillRect(0, 0, W, H);
+  if (style === 'abstract') {
+    for (const [col, k] of [[c2, 0.36], [c1, 0.28], [c3, 0.2], [mustard, 0.12]]) {
+      x.fillStyle = col; x.beginPath();
+      const cx = W * (0.25 + r() * 0.5), cy = H * (0.25 + r() * 0.5), R = Math.min(W, H) * k;
+      x.moveTo(cx + R, cy);
+      for (let a = 0; a <= Math.PI * 2 + 0.01; a += Math.PI / 4) x.quadraticCurveTo(cx + Math.cos(a - 0.4) * R * 1.3, cy + Math.sin(a - 0.4) * R * 1.2, cx + Math.cos(a) * R * (0.8 + r() * 0.3), cy + Math.sin(a) * R * (0.8 + r() * 0.3));
+      x.fill();
+    }
+  } else if (style === 'arch') {
+    const cols = [c3, c1, c2, mustard, '#e8d9c4'], bw = W * 0.075;
+    for (let i = 0; i < cols.length; i++) {
+      x.strokeStyle = cols[i]; x.lineWidth = bw;
+      x.beginPath(); x.arc(W / 2, H * 0.78, W * 0.36 - i * bw, Math.PI, 0); x.stroke();
+    }
+    x.fillStyle = c3; x.beginPath(); x.arc(W * 0.78, H * 0.22, W * 0.07, 0, Math.PI * 2); x.fill();
+  } else if (style === 'line') {
+    x.fillStyle = c2; x.beginPath(); x.arc(W * 0.62, H * 0.42, Math.min(W, H) * 0.22, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = dark; x.lineWidth = W * 0.008; x.lineCap = 'round';
+    x.beginPath(); x.moveTo(W * 0.2, H * 0.85);
+    x.bezierCurveTo(W * 0.1, H * 0.4, W * 0.45, H * 0.15, W * 0.5, H * 0.45);
+    x.bezierCurveTo(W * 0.55, H * 0.7, W * 0.3, H * 0.6, W * 0.45, H * 0.35);
+    x.bezierCurveTo(W * 0.6, H * 0.1, W * 0.9, H * 0.4, W * 0.8, H * 0.85);
+    x.stroke();
+  } else if (style === 'landscape') {
+    x.fillStyle = hexMix(c2, '#ffffff', 0.4); x.fillRect(0, 0, W, H);
+    x.fillStyle = mustard; x.beginPath(); x.arc(W * 0.7, H * 0.3, W * 0.09, 0, Math.PI * 2); x.fill();
+    [[c2, 0.55], [c1, 0.68], [c3, 0.82]].forEach(([col, y0], i) => {
+      x.fillStyle = col; x.beginPath(); x.moveTo(0, H);
+      for (let k = 0; k <= 6; k++) x.lineTo((W / 6) * k, H * (y0 - (k % 2 ? 0.12 + r() * 0.08 : 0.02) + i * 0.02));
+      x.lineTo(W, H); x.fill();
+    });
+  } else if (style === 'bauhaus') {
+    const n = 3, cw = W / n, ch = H / n, cols = [c1, c3, mustard, '#2f2c28', c2, '#c96f4a'];
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const k = Math.floor(r() * 4), col = cols[Math.floor(r() * cols.length)];
+      x.fillStyle = col; x.beginPath();
+      const X = i * cw, Y = j * ch;
+      if (k === 0) x.arc(X + cw / 2, Y + ch / 2, Math.min(cw, ch) * 0.38, 0, Math.PI * 2);
+      else if (k === 1) { x.moveTo(X + 4, Y + ch - 4); x.arc(X + 4, Y + ch - 4, Math.min(cw, ch) - 8, -Math.PI / 2, 0); }
+      else if (k === 2) x.rect(X + cw * 0.15, Y + ch * 0.15, cw * 0.7, ch * 0.7);
+      else { x.moveTo(X + cw / 2, Y + 6); x.lineTo(X + cw - 6, Y + ch - 6); x.lineTo(X + 6, Y + ch - 6); }
+      x.fill();
+    }
+  } else if (style === 'botanical') {
+    x.strokeStyle = c3; x.lineWidth = W * 0.01;
+    x.beginPath(); x.moveTo(W / 2, H * 0.92); x.quadraticCurveTo(W * 0.45, H * 0.5, W * 0.52, H * 0.1); x.stroke();
+    for (let i = 0; i < 9; i++) {
+      const t = 0.15 + i * 0.085, y = H * (0.92 - t * 0.85), side = i % 2 ? 1 : -1;
+      x.fillStyle = i % 3 ? c1 : c2;
+      x.save(); x.translate(W * (0.5 - 0.03 * Math.sin(t * 3)), y); x.rotate(side * (0.9 - t * 0.4));
+      x.beginPath(); x.ellipse(side * W * 0.12, 0, W * 0.13, H * 0.035, 0, 0, Math.PI * 2); x.fill(); x.restore();
+    }
+  }
+}
+const imgCache = new Map();
+function photoTexture(src) {
+  if (imgCache.has(src)) return imgCache.get(src);
+  const t = new THREE.Texture(); t.colorSpace = THREE.SRGBColorSpace;
+  const im = new Image(); im.onload = () => { t.image = im; t.needsUpdate = true; }; im.src = src;
+  imgCache.set(src, t);
+  return t;
+}
+// 掛畫：配色＝畫框色；主色＝畫作主色；mat = 白色卡紙
+function framedArt({ w, d, h, color, color2, img }, style, opts = {}) {
+  const g = new THREE.Group(), fr = Math.max(1.5, Math.min(w, h) * 0.035), depth = Math.max(2, d);
+  const frameM = mat(color2, { r: 0.55 });
+  B(g, w, h, depth * 0.6, 0, 0, -depth * 0.2, frameM, 0.4);
+  const matPad = opts.mat ? Math.min(w, h) * 0.09 : 0;
+  B(g, w - fr * 2, h - fr * 2, 0.4, 0, fr, depth * 0.1 + 0.1, mat('#f7f4ee', { r: 0.9 }), 0, false);
+  const aw = w - 2 * fr - 2 * matPad, ah = h - 2 * fr - 2 * matPad;
+  const tex = img ? photoTexture(img) : canvasTexture(['art', style, color, Math.round(aw), Math.round(ah), opts.seed || 0].join('|'), 512, Math.max(64, Math.round(512 * ah / aw)), (x, W, H) => drawArt(x, W, H, style, color, opts.seed || 3));
+  const pic = new THREE.Mesh(new THREE.PlaneGeometry(aw, ah), new THREE.MeshStandardMaterial({ map: tex, roughness: 0.8 }));
+  pic.position.set(0, h / 2, depth * 0.1 + 0.4); g.add(pic);
+  return g;
+}
+function triptych(o) {
+  const g = new THREE.Group(), gap = 6, pw = (o.w - gap * 2) / 3;
+  ['abstract', 'arch', 'abstract'].forEach((st, i) => {
+    const p = framedArt({ ...o, w: pw, img: null }, st, { seed: i + 2 });
+    p.position.x = -o.w / 2 + pw / 2 + i * (pw + gap); g.add(p);
+  });
+  return g;
+}
+function mirrorRound({ w, d, h, color2 }) {
+  const g = new THREE.Group(), R = Math.min(w, h) / 2;
+  const glass = new THREE.Mesh(new THREE.CircleGeometry(R - 1.5, 64), mat('#d5dde0', { r: 0.08, m: 0.8, e: '#8f9a9e', ei: 0.35 }));
+  glass.position.set(0, h / 2, d / 2 - 0.4); g.add(glass);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(R - 1, 1.6, 12, 64), mat(color2, { r: 0.35, m: 0.5 }));
+  ring.position.set(0, h / 2, d / 2 - 1); g.add(ring);
+  B(g, (R - 2) * 1.4, (R - 2) * 1.4, 1, 0, h / 2 - (R - 2) * 0.7, -d / 2 + 0.5, mat('#cfcac0'), 0, false);
+  return g;
+}
+function mirrorArch({ w, d, h, color2 }) {
+  const g = new THREE.Group(), r = w / 2;
+  const shape = (inset) => {
+    const s = new THREE.Shape(), R = r - inset;
+    s.moveTo(-R, inset); s.lineTo(R, inset); s.lineTo(R, h - r); s.absarc(0, h - r, R, 0, Math.PI, false); s.lineTo(-R, inset);
+    return s;
+  };
+  const frame = new THREE.Mesh(new THREE.ExtrudeGeometry(shape(0), { depth: 3, bevelEnabled: false, curveSegments: 40 }), mat(color2, { r: 0.5 }));
+  frame.castShadow = true; g.add(frame);
+  const glass = new THREE.Mesh(new THREE.ShapeGeometry(shape(3), 40), mat('#d5dde0', { r: 0.08, m: 0.8, e: '#8f9a9e', ei: 0.35 }));
+  glass.position.z = 3.05; g.add(glass);
+  // 靠牆斜放
+  g.rotation.x = -0.08; g.position.z = -d / 2 + 4;
+  const wrap = new THREE.Group(); wrap.add(g);
+  return wrap;
+}
+function wallShelf({ w, d, h, color, color2 }) {
+  const g = new THREE.Group(), wood = mat(color, { r: 0.6 });
+  B(g, w, 2.5, d, 0, 0, 0, wood, 0.5);
+  for (const sx of [-1, 1]) B(g, 2, 12, d - 4, sx * (w / 2 - 10), -12, -1, mat(color2, { r: 0.4, m: 0.5 }), 0, false);
+  C(g, 4, 3, 16, -w * 0.3, 2.5, 0, mat('#e8e2d6', { r: 0.4 }), 18);
+  for (let i = 0; i < 4; i++) B(g, 2.4, 16 + (i % 2) * 3, d * 0.7, -w * 0.05 + i * 2.6, 2.5, 0, mat(['#8c6d5a', '#c9b79c', '#5d7287', '#e4dccd'][i], { r: 0.8 }), 0, false);
+  C(g, 5, 4, 7, w * 0.3, 2.5, 0, mat('#d9cfc0', { r: 0.8 }), 16);
+  const leaves = new THREE.Mesh(new THREE.IcosahedronGeometry(7, 0), mat('#6f9358', { r: 0.8, flat: true }));
+  leaves.position.set(w * 0.3, 15, 0); leaves.scale.y = 0.8; g.add(leaves);
+  g.position.y = h - 2.5;
+  const wrap = new THREE.Group(); wrap.add(g);
+  return wrap;
+}
+function wallClock({ w, d, h, color, color2 }) {
+  const g = new THREE.Group(), R = Math.min(w, h) / 2;
+  const face = new THREE.Mesh(new THREE.CylinderGeometry(R, R, d, 48), mat(color, { r: 0.6 }));
+  face.rotation.x = Math.PI / 2; face.position.y = h / 2; face.castShadow = true; g.add(face);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(R, 1, 10, 48), mat(color2, { r: 0.4, m: 0.4 }));
+  rim.position.set(0, h / 2, d / 2); g.add(rim);
+  const ink = mat(color2, { r: 0.5 });
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2, t = B(g, 0.8, i % 3 ? 2 : 3.5, 0.4, Math.sin(a) * R * 0.82, h / 2 + Math.cos(a) * R * 0.82 - 1, d / 2 + 0.2, ink, 0, false);
+    t.rotation.z = -a;
+  }
+  const hand = (len, wd, ang) => { const m = new THREE.Mesh(new THREE.BoxGeometry(wd, len, 0.4), ink); m.geometry.translate(0, len / 2, 0); m.position.set(0, h / 2, d / 2 + 0.5); m.rotation.z = ang; g.add(m); };
+  hand(R * 0.5, 1.4, -1.0); hand(R * 0.75, 0.9, 2.2);
+  return g;
+}
+
 // 人形：身高參考
 function person({ w, d, h, color }) {
   const g = new THREE.Group(), m = mat(color, { r: 0.7 }), s = h / 170;
@@ -861,7 +1060,7 @@ function pendant({ w, d, h, color, elev }) {
 
 // ── 目錄 ────────────────────────────────────────────────
 export const CEIL_H = 278;
-export const CATEGORIES = ['沙發', '單人椅', '客廳', '書桌', '書櫃・層架', '燈具', '臥室', '餐廚', '衛浴', '收納', '書房・其他'];
+export const CATEGORIES = ['沙發', '單人椅', '客廳', '地毯', '牆面裝飾', '書桌', '書櫃・層架', '燈具', '臥室', '餐廚', '衛浴', '收納', '書房・其他'];
 
 export const CATALOG = {
   sofa:          sofaDef('三人沙發（圓扶手）', 240, 88, 80, '#e6ddcd', '#6b4f36', { arm: 22, armH: 62, legH: 10, seatH: 44, backD: 20, n: 3, round: 9, rollArm: true }),
@@ -893,8 +1092,29 @@ export const CATALOG = {
   tv_floating:   { name: '懸空電視櫃', cat: '客廳', w: 280, d: 40, h: 40, elev: 25, color: '#bdbab4', color2: '#a8835e', build: tvFloating },
   tv_cabinet:    { name: '電視櫃', cat: '客廳', w: 200, d: 40, h: 45, color: '#c49a6c', build: tvCabinet },
   tv:            { name: '電視 65吋', cat: '客廳', w: 145, d: 6, h: 84, color: '#1d1d1f', build: tv },
-  rug:           { name: '地毯', cat: '客廳', w: 200, d: 140, h: 1, color: '#e9e2d6', build: rug },
-  rug_round:     { name: '圓地毯', cat: '客廳', w: 120, d: 120, h: 1, color: '#c8b59a', build: rugRound },
+  rug:           { name: '素面地毯', cat: '地毯', w: 200, d: 140, h: 1, color: '#e9e2d6', build: rug },
+  rug_round:     { name: '圓地毯', cat: '地毯', w: 120, d: 120, h: 1, color: '#c8b59a', build: rugRound },
+  // 地毯
+  rug_border:    { name: '邊框地毯', cat: '地毯', w: 200, d: 140, h: 1, color: '#e6ddcc', color2: '#8a7563', build: o => rugStyled(o, 'border') },
+  rug_stripe:    { name: '條紋地毯', cat: '地毯', w: 200, d: 140, h: 1, color: '#ece6da', color2: '#5d6b7a', build: o => rugStyled(o, 'stripe') },
+  rug_berber:    { name: '摩洛哥菱格地毯', cat: '地毯', w: 240, d: 170, h: 1.5, color: '#f1ece2', color2: '#3a3532', build: o => rugStyled(o, 'berber') },
+  rug_shag:      { name: '長毛地毯', cat: '地毯', w: 200, d: 150, h: 3, color: '#e9e3d8', color2: '#e9e3d8', build: o => rugStyled(o, 'shag') },
+  rug_jute:      { name: '黃麻圓地毯', cat: '地毯', w: 150, d: 150, h: 1.2, color: '#c8ac82', color2: '#c8ac82', build: o => rugStyled(o, 'jute') },
+  rug_blob:      { name: '圖樣地毯（色塊）', cat: '地毯', w: 200, d: 140, h: 1, color: '#efe8dc', color2: '#c96f4a', build: o => rugStyled(o, 'blob') },
+  rug_runner:    { name: '走道長地毯', cat: '地毯', w: 80, d: 240, h: 1, color: '#d9cdb8', color2: '#6e5a48', build: o => rugStyled(o, 'border') },
+  // 牆面裝飾（離地為畫框底部高度；配色＝畫框）
+  art_abstract:  { name: '掛畫：抽象色塊', cat: '牆面裝飾', w: 60, d: 3, h: 80, elev: 120, color: '#b8916c', color2: '#c9a77d', build: o => framedArt(o, 'abstract', { mat: true }) },
+  art_arch:      { name: '掛畫：拱形彩虹', cat: '牆面裝飾', w: 50, d: 3, h: 70, elev: 125, color: '#c08a6b', color2: '#f2f0ea', build: o => framedArt(o, 'arch', { mat: true }) },
+  art_line:      { name: '掛畫：線條', cat: '牆面裝飾', w: 50, d: 3, h: 70, elev: 125, color: '#d8b8a0', color2: '#2b2b2b', build: o => framedArt(o, 'line', { mat: true }) },
+  art_landscape: { name: '掛畫：山景（橫幅）', cat: '牆面裝飾', w: 120, d: 3, h: 60, elev: 120, color: '#7f9585', color2: '#2b2b2b', build: o => framedArt(o, 'landscape') },
+  art_bauhaus:   { name: '掛畫：包浩斯幾何', cat: '牆面裝飾', w: 60, d: 3, h: 60, elev: 130, color: '#5d7287', color2: '#f2f0ea', build: o => framedArt(o, 'bauhaus') },
+  art_botanical: { name: '掛畫：植物', cat: '牆面裝飾', w: 40, d: 3, h: 60, elev: 130, color: '#7a8a6b', color2: '#c9a77d', build: o => framedArt(o, 'botanical', { mat: true }) },
+  art_triptych:  { name: '掛畫：三聯幅', cat: '牆面裝飾', w: 150, d: 3, h: 60, elev: 125, color: '#b8916c', color2: '#2b2b2b', build: triptych },
+  art_photo:     { name: '掛畫：我的照片', cat: '牆面裝飾', w: 60, d: 3, h: 45, elev: 130, color: '#9a9d98', color2: '#2b2b2b', build: o => framedArt(o, 'landscape', { mat: true }) },
+  mirror_round:  { name: '圓鏡', cat: '牆面裝飾', w: 60, d: 3, h: 60, elev: 120, color: '#dfe6e8', color2: '#c9a24a', build: mirrorRound },
+  mirror_arch:   { name: '拱形落地鏡', cat: '牆面裝飾', w: 60, d: 12, h: 170, color: '#dfe6e8', color2: '#b08d68', build: mirrorArch },
+  wall_shelf:    { name: '壁掛層板', cat: '牆面裝飾', w: 80, d: 20, h: 30, elev: 140, color: '#c9a77d', color2: '#2b2b2b', build: wallShelf },
+  wall_clock:    { name: '掛鐘', cat: '牆面裝飾', w: 35, d: 4, h: 35, elev: 185, color: '#f4f1ea', color2: '#2b2b2b', build: wallClock },
   pendant:       { name: '吊燈（橘色圓罩）', cat: '燈具', w: 50, d: 50, h: 15, elev: 150, color: '#e8692a', build: pendant },
   pendant_vaxjo: { name: 'VÄXJÖ 吊燈', cat: '燈具', w: 38, d: 38, h: 20, elev: 160, color: '#d9cdb7', color2: '#d9cdb7', build: o => pendantStyled(o, { matte: true }) },
   pendant_bunkeflo:{ name: 'BUNKEFLO 吊燈', cat: '燈具', w: 36, d: 36, h: 18, elev: 160, color: '#f2f2f0', color2: '#d7b98a', build: o => pendantStyled(o, { matte: true, cap: true }) },
@@ -962,7 +1182,7 @@ export const CATALOG = {
 
 export function buildFurniture(it) {
   const def = CATALOG[it.type];
-  const o = { w: it.w, d: it.d, h: it.h, elev: it.elev || 0, color: it.color || def.color, color2: it.color2 || def.color2 || '#888888' };
+  const o = { w: it.w, d: it.d, h: it.h, elev: it.elev || 0, color: it.color || def.color, color2: it.color2 || def.color2 || '#888888', img: it.img || null };
   const g = def.build(o);
   g.traverse(m => { if (m.isMesh) m.userData.fid = it.id; });
   return g;
