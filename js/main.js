@@ -1,0 +1,841 @@
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import * as P from './plan.js';
+import { CATALOG, CATEGORIES, buildFurniture, mat } from './furniture.js';
+
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const deg = THREE.MathUtils.degToRad;
+const STORE_KEY = 'fp3d.layout.v1';
+
+// ── 基本場景 ─────────────────────────────────────────────
+const viewport = $('#viewport');
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+viewport.appendChild(renderer.domElement);
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.domElement.className = 'labels';
+viewport.appendChild(labelRenderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#ece8e1');
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+// 範圍
+const BX0 = P.cx(285), BX1 = P.cx(1205), BZ0 = P.cz(65), BZ1 = P.cz(917);
+const CX = (BX0 + BX1) / 2, CZ = (BZ0 + BZ1) / 2;
+
+scene.add(new THREE.HemisphereLight('#fffaf0', '#b9b0a3', 0.55));
+const sun = new THREE.DirectionalLight('#fff4e2', 1.6);
+sun.position.set(CX - 500, 1400, CZ + 700);
+sun.target.position.set(CX, 0, CZ);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -750, right: 750, top: 750, bottom: -750, near: 100, far: 3500 });
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.6;
+scene.add(sun, sun.target);
+
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(8000, 8000), new THREE.ShadowMaterial({ opacity: 0.12 }));
+ground.rotation.x = -Math.PI / 2; ground.position.set(CX, -3, CZ); ground.receiveShadow = true;
+scene.add(ground);
+
+// ── 相機與控制 ───────────────────────────────────────────
+const persp = new THREE.PerspectiveCamera(40, 1, 5, 20000);
+const homePos = () => { const k = Math.max(1, 1.05 / (persp.aspect || 1.6)); return new THREE.Vector3(CX + 60 * k, 1650 * k, CZ + 820 * k); };
+const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 10000);
+ortho.position.set(CX, 3000, CZ); ortho.up.set(0, 0, -1); ortho.lookAt(CX, 0, CZ);
+
+const ctrlP = new OrbitControls(persp, renderer.domElement);
+ctrlP.target.set(CX, 0, CZ);
+ctrlP.enableDamping = true; ctrlP.dampingFactor = 0.08;
+ctrlP.maxPolarAngle = deg(86); ctrlP.minDistance = 80; ctrlP.maxDistance = 5000;
+ctrlP.screenSpacePanning = false;
+
+const ctrlO = new OrbitControls(ortho, renderer.domElement);
+ctrlO.target.set(CX, 0, CZ);
+ctrlO.enableRotate = false; ctrlO.screenSpacePanning = true;
+ctrlO.enableDamping = true; ctrlO.dampingFactor = 0.1;
+ctrlO.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+ctrlO.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_PAN };
+ctrlO.minZoom = 0.3; ctrlO.maxZoom = 8;
+ctrlO.enabled = false;
+
+let mode = '3d';
+let cam = persp, ctrl = ctrlP;
+
+function resize() {
+  const w = viewport.clientWidth, h = viewport.clientHeight;
+  renderer.setSize(w, h); labelRenderer.setSize(w, h);
+  persp.aspect = w / h; persp.updateProjectionMatrix();
+  const half = 620, a = w / h;
+  const hh = a > (BX1 - BX0) / (BZ1 - BZ0) ? half : half * ((BX1 - BX0) / (BZ1 - BZ0)) / a;
+  Object.assign(ortho, { left: -hh * a, right: hh * a, top: hh, bottom: -hh });
+  ortho.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(viewport);
+resize();
+persp.position.copy(homePos());
+
+// ── 材質 ─────────────────────────────────────────────────
+function canvasTex(size, draw, worldSize) {
+  const c = document.createElement('canvas'); c.width = c.height = size;
+  draw(c.getContext('2d'), size);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(1 / worldSize, 1 / worldSize);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+function rnd(seed) { let s = seed; return () => (s = (s * 16807) % 2147483647) / 2147483647; }
+const woodTex = canvasTex(1024, (g, n) => {
+  const r = rnd(7), rows = 12, rh = n / rows, pl = n / 2;
+  for (let i = 0; i < rows; i++) {
+    const off = r() * pl;
+    for (let x = -pl; x < n + pl; x += pl) {
+      const l = 40 + r() * 9, hue = 26 + r() * 6;
+      g.fillStyle = `hsl(${hue},32%,${l}%)`;
+      g.fillRect(x + off, i * rh, pl, rh);
+      g.strokeStyle = `hsla(${hue},30%,${l - 12}%,0.25)`; g.lineWidth = 1;
+      for (let k = 0; k < 7; k++) {
+        const y = i * rh + 3 + r() * (rh - 6);
+        g.beginPath(); g.moveTo(x + off, y);
+        g.bezierCurveTo(x + off + pl * 0.3, y + r() * 4 - 2, x + off + pl * 0.6, y + r() * 4 - 2, x + off + pl, y);
+        g.stroke();
+      }
+      g.fillStyle = 'rgba(60,40,25,0.35)'; g.fillRect(x + off, i * rh, 2, rh);
+    }
+    g.fillStyle = 'rgba(60,40,25,0.3)'; g.fillRect(0, i * rh, n, 2);
+  }
+}, 240);
+const tileTex = (base, grout, tiles = 2) => canvasTex(512, (g, n) => {
+  const r = rnd(11), s = n / tiles;
+  g.fillStyle = grout; g.fillRect(0, 0, n, n);
+  for (let i = 0; i < tiles; i++) for (let j = 0; j < tiles; j++) {
+    const c = new THREE.Color(base); c.offsetHSL(0, 0, (r() - 0.5) * 0.03);
+    g.fillStyle = '#' + c.getHexString(); g.fillRect(i * s + 2, j * s + 2, s - 4, s - 4);
+  }
+}, 120);
+const FLOORS = {
+  wood: new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.62 }),
+  tile: new THREE.MeshStandardMaterial({ map: tileTex('#a9a8a3', '#8d8c88', 4), roughness: 0.5 }),
+  tileLight: new THREE.MeshStandardMaterial({ map: tileTex('#cfcac1', '#b3aea5', 2), roughness: 0.7 }),
+};
+const WALL_SIDE = new THREE.MeshStandardMaterial({ color: '#f3f0ea', roughness: 0.92 });
+const WALL_TOP = new THREE.MeshStandardMaterial({ color: '#56575a', roughness: 0.9 });
+const WALL_MATS = [WALL_SIDE, WALL_SIDE, WALL_TOP, WALL_SIDE, WALL_SIDE, WALL_SIDE];
+
+// ── 户型 ─────────────────────────────────────────────────
+const rectCm = r => ({ x1: P.cx(r[0]), z1: P.cz(r[1]), x2: P.cx(r[2]), z2: P.cz(r[3]) });
+const polyCm = poly => poly.map(([x, y]) => [P.cx(x), P.cz(y)]);
+function polyArea(pts) { let a = 0; for (let i = 0; i < pts.length; i++) { const [x1, z1] = pts[i], [x2, z2] = pts[(i + 1) % pts.length]; a += x1 * z2 - x2 * z1; } return Math.abs(a / 2) / 10000; }
+function polyCenter(pts) { const xs = pts.map(p => p[0]), zs = pts.map(p => p[1]); return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...zs) + Math.max(...zs)) / 2]; }
+function polyMesh(pts, material, y) {
+  const shape = new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, -z)));
+  const m = new THREE.Mesh(new THREE.ShapeGeometry(shape), material);
+  m.rotation.x = -Math.PI / 2; m.position.y = y; m.receiveShadow = true;
+  return m;
+}
+
+const planGroup = new THREE.Group(); scene.add(planGroup);
+const wallGroup = new THREE.Group(); scene.add(wallGroup);
+const labelGroup = new THREE.Group(); scene.add(labelGroup);
+const colliders = []; // 漫遊碰撞用
+let wallHeight = P.CEIL;
+
+function wallBox(r, y0, y1, mats = WALL_MATS) {
+  if (y1 - y0 < 0.5) return;
+  const m = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x1, y1 - y0, r.z2 - r.z1), mats);
+  m.position.set((r.x1 + r.x2) / 2, (y0 + y1) / 2, (r.z1 + r.z2) / 2);
+  m.castShadow = m.receiveShadow = true;
+  wallGroup.add(m);
+}
+function plain(w, h, d, x, y, z, material) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+  m.position.set(x, y + h / 2, z); m.castShadow = true; m.receiveShadow = true;
+  wallGroup.add(m); return m;
+}
+
+function buildFloors() {
+  for (const o of P.OUTLINE) planGroup.add(polyMesh(polyCm(o), new THREE.MeshStandardMaterial({ color: '#d8d4cc', roughness: 0.8 }), 0));
+  for (const room of P.ROOMS) planGroup.add(polyMesh(polyCm(room.poly), FLOORS[room.floor], 0.3));
+}
+
+function buildWalls() {
+  wallGroup.clear();
+  colliders.length = 0;
+  const H = wallHeight;
+  for (const w of P.WALLS) { const r = rectCm(w); wallBox(r, 0, H); colliders.push(r); }
+  for (const w of P.PARAPETS) {
+    const r = rectCm(w); colliders.push(r);
+    wallBox(r, 0, Math.min(P.PARAPET_H, H));
+  }
+  const frame = mat('#4f5256', { r: 0.5, m: 0.4 }), glass = mat('#cfe6ee', { o: 0.28, r: 0.05, m: 0.1, ds: true });
+  for (const op of P.OPENINGS) {
+    const r = rectCm(op.r), horiz = (r.x2 - r.x1) > (r.z2 - r.z1);
+    const len = horiz ? r.x2 - r.x1 : r.z2 - r.z1, th = horiz ? r.z2 - r.z1 : r.x2 - r.x1;
+    const mx = (r.x1 + r.x2) / 2, mz = (r.z1 + r.z2) / 2;
+    if (op.kind !== 'door') colliders.push(r);
+    if (op.sill > 0) wallBox(r, 0, Math.min(op.sill, H));
+    if (op.head < H) wallBox(r, op.head, H);
+    const top = Math.min(op.head, H);
+    if (op.kind === 'window' || op.kind === 'slide') {
+      if (op.sill >= H) continue;
+      const gh = top - op.sill;
+      const box = (a, h, y, along) => horiz ? plain(a, h, 6, mx + along, y, mz, frame) : plain(6, h, a, mx, y, mz + along, frame);
+      const pane = horiz ? plain(len, gh, 1, mx, op.sill, mz, glass) : plain(1, gh, len, mx, op.sill, mz, glass);
+      pane.castShadow = false;
+      box(len, 4, op.sill, 0);
+      if (top === op.head) box(len, 4, top - 4, 0);
+      for (const s of [-1, 1]) box(4, gh, op.sill, s * (len / 2 - 2));
+      box(3, gh, op.sill, 0);
+    } else if (op.kind === 'door') {
+      const dh = Math.min(op.head, H);
+      const a1 = horiz ? r.x1 : r.z1, a2 = horiz ? r.x2 : r.z2;
+      const pc = horiz ? mz : mx;
+      const hinge = op.hinge ? a2 - 2.5 : a1 + 2.5;
+      const leafLen = len - 4, p = pc + op.swing * (th / 2 + leafLen / 2);
+      const leafMat = mat(op.main ? '#6d5847' : '#b88a5c', { r: 0.55 });
+      if (horiz) plain(4, dh, leafLen, hinge, 0, p, leafMat); else plain(leafLen, dh, 4, p, 0, hinge, leafMat);
+      // 門檻
+      const sill = mat('#bdb7ad', { r: 0.6 });
+      if (horiz) plain(len, 0.8, th, mx, 0, mz, sill); else plain(th, 0.8, len, mx, 0, mz, sill);
+    }
+  }
+}
+
+function buildLabels() {
+  const list = $('#roomList');
+  list.innerHTML = '';
+  let total = 0;
+  for (const room of P.ROOMS) {
+    const pts = polyCm(room.poly), area = polyArea(pts);
+    total += area;
+    const [lx, lz] = room.label ? [P.cx(room.label[0]), P.cz(room.label[1])] : polyCenter(pts);
+    room._center = polyCenter(pts); room._pts = pts;
+    const el = document.createElement('div');
+    el.className = 'room-label';
+    el.innerHTML = `<b>${room.name}</b><span>${area.toFixed(1)} m² · ${(area * 0.3025).toFixed(1)} 坪</span>`;
+    const o = new CSS2DObject(el); o.position.set(lx, 5, lz); labelGroup.add(o);
+    const li = document.createElement('button');
+    li.className = 'room-item';
+    li.innerHTML = `<span>${room.name}</span><small>${area.toFixed(1)} m²</small>`;
+    li.onclick = () => flyToRoom(room);
+    list.appendChild(li);
+  }
+  for (const s of P.SUBLABELS) {
+    const el = document.createElement('div'); el.className = 'room-label sub'; el.innerHTML = `<b>${s.name}</b>`;
+    const o = new CSS2DObject(el); o.position.set(P.cx(s.at[0]), 5, P.cz(s.at[1])); labelGroup.add(o);
+  }
+  $('#totalArea').textContent = `室內約 ${total.toFixed(1)} m²（${(total * 0.3025).toFixed(1)} 坪）`;
+}
+
+// 參考底圖
+const overlayTex = new THREE.TextureLoader().load(P.PLAN_IMAGE.src);
+overlayTex.colorSpace = THREE.SRGBColorSpace;
+const [ix1, iy1, ix2, iy2] = P.PLAN_IMAGE.rect;
+const overlay = new THREE.Mesh(
+  new THREE.PlaneGeometry((ix2 - ix1) * P.S, (iy2 - iy1) * P.S),
+  new THREE.MeshBasicMaterial({ map: overlayTex, transparent: true, opacity: 0.75, depthWrite: false, toneMapped: false })
+);
+overlay.rotation.x = -Math.PI / 2;
+overlay.position.set(P.cx((ix1 + ix2) / 2), 1.5, P.cz((iy1 + iy2) / 2));
+overlay.renderOrder = 2; overlay.visible = false;
+scene.add(overlay);
+
+buildFloors(); buildWalls(); buildLabels();
+
+// ── 家具狀態 ─────────────────────────────────────────────
+const furnRoot = new THREE.Group(); scene.add(furnRoot);
+let items = [];
+const objs = new Map();
+let selId = null;
+let uid = 1;
+const newId = () => 'f' + (uid++).toString(36) + Date.now().toString(36).slice(-3);
+
+function makeItem(type, x, z, extra = {}) {
+  const def = CATALOG[type];
+  return { id: newId(), type, x, z, w: def.w, d: def.d, h: def.h, rot: 0, elev: 0, color: def.color, color2: def.color2 || null, name: def.name, ...extra };
+}
+function defaultLayout() {
+  return P.DEFAULT_LAYOUT.map(f => {
+    const extra = { ...f }; delete extra.t; delete extra.c;
+    if (extra.name == null) delete extra.name;
+    if (extra.rot != null) extra.rot = normRot(extra.rot);
+    return makeItem(f.t, round1(P.cx(f.c[0])), round1(P.cz(f.c[1])), extra);
+  });
+}
+const round1 = v => Math.round(v * 10) / 10;
+
+function disposeObj(g) { g.traverse(m => { if (m.isMesh) m.geometry.dispose(); }); }
+function syncObj(it) {
+  const old = objs.get(it.id);
+  if (old) { furnRoot.remove(old); disposeObj(old); }
+  const g = buildFurniture(it);
+  g.position.set(it.x, it.elev || 0, it.z);
+  g.rotation.y = deg(it.rot);
+  g.userData.fid = it.id;
+  furnRoot.add(g); objs.set(it.id, g);
+}
+function placeObj(it) {
+  const g = objs.get(it.id); if (!g) return;
+  g.position.set(it.x, it.elev || 0, it.z); g.rotation.y = deg(it.rot);
+}
+function setItems(list) {
+  for (const g of objs.values()) { furnRoot.remove(g); disposeObj(g); }
+  objs.clear();
+  items = list.filter(it => CATALOG[it.type]);
+  items.forEach(syncObj);
+  select(null);
+}
+
+// ── 選取外框 ─────────────────────────────────────────────
+const selHelper = new THREE.Group(); scene.add(selHelper);
+const selMat = new THREE.LineBasicMaterial({ color: '#d0743c', depthTest: false, transparent: true });
+const selFill = new THREE.MeshBasicMaterial({ color: '#d0743c', transparent: true, opacity: 0.12, depthTest: false });
+function buildSelHelper() {
+  selHelper.clear();
+  const it = items.find(i => i.id === selId); if (!it) return;
+  const { w, d } = it, pad = 3;
+  const pts = [[-w / 2 - pad, -d / 2 - pad], [w / 2 + pad, -d / 2 - pad], [w / 2 + pad, d / 2 + pad], [-w / 2 - pad, d / 2 + pad]];
+  const geo = new THREE.BufferGeometry().setFromPoints(pts.map(([x, z]) => new THREE.Vector3(x, 0, z)));
+  const loop = new THREE.LineLoop(geo, selMat); loop.renderOrder = 10;
+  const box = new THREE.BoxGeometry(1, 1, 1); box.translate(0, 0.5, 0);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box), selMat);
+  edges.scale.set(w + pad * 2, it.h + (it.elev || 0) + 2, d + pad * 2); edges.renderOrder = 10;
+  const fill = new THREE.Mesh(new THREE.PlaneGeometry(w + pad * 2, d + pad * 2), selFill);
+  fill.rotation.x = -Math.PI / 2; fill.position.y = 0.5; fill.renderOrder = 9;
+  const arrow = new THREE.Mesh(new THREE.ConeGeometry(Math.min(10, w / 5), Math.min(16, d / 2), 3), new THREE.MeshBasicMaterial({ color: '#d0743c', depthTest: false }));
+  arrow.rotation.x = Math.PI / 2; arrow.position.set(0, 1, d / 2 + pad + 12); arrow.renderOrder = 11;
+  selHelper.add(loop, edges, fill, arrow);
+  syncHelper();
+}
+function syncHelper() {
+  const it = items.find(i => i.id === selId); if (!it) return;
+  selHelper.position.set(it.x, 0.6, it.z); selHelper.rotation.y = deg(it.rot);
+}
+
+// ── 歷史紀錄與儲存 ───────────────────────────────────────
+const hist = []; let hIndex = -1;
+const snap = () => JSON.stringify(items);
+function commit(save = true) {
+  hist.splice(hIndex + 1);
+  hist.push(snap());
+  if (hist.length > 120) hist.shift();
+  hIndex = hist.length - 1;
+  if (save) persist();
+  updateUndo();
+}
+function persist() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 1, items })); } catch { /* 私密模式等 */ }
+}
+function restore(i) {
+  hIndex = i;
+  const keep = selId;
+  setItems(JSON.parse(hist[i]));
+  if (items.some(it => it.id === keep)) select(keep);
+  persist(); updateUndo();
+}
+const undo = () => hIndex > 0 && restore(hIndex - 1);
+const redo = () => hIndex < hist.length - 1 && restore(hIndex + 1);
+function updateUndo() { $('#btnUndo').disabled = hIndex <= 0; $('#btnRedo').disabled = hIndex >= hist.length - 1; }
+
+// ── 選取與屬性面板 ───────────────────────────────────────
+const panel = $('#props');
+function select(id) {
+  selId = id;
+  buildSelHelper();
+  const it = items.find(i => i.id === id);
+  document.body.classList.toggle('has-sel', !!it);
+  if (!it) return;
+  const def = CATALOG[it.type];
+  $('#pName').value = it.name || def.name;
+  $('#pType').textContent = def.name;
+  $('#pW').value = Math.round(it.w); $('#pD').value = Math.round(it.d); $('#pH').value = Math.round(it.h);
+  $('#pElev').value = Math.round(it.elev || 0);
+  $('#pRot').value = Math.round(it.rot); $('#pRotVal').textContent = Math.round(it.rot) + '°';
+  $('#pColor').value = it.color || def.color;
+  $('#pColor2Row').hidden = !def.color2;
+  if (def.color2) $('#pColor2').value = it.color2 || def.color2;
+}
+const selItem = () => items.find(i => i.id === selId);
+
+function updateSel(fn, rebuild = false) {
+  const it = selItem(); if (!it) return;
+  fn(it);
+  if (rebuild) syncObj(it); else placeObj(it);
+  buildSelHelper();
+}
+const normRot = r => ((Math.round(r) % 360) + 360) % 360;
+
+$('#pName').addEventListener('change', e => { updateSel(it => it.name = e.target.value.trim() || CATALOG[it.type].name); commit(); });
+for (const [id, key, min] of [['#pW', 'w', 5], ['#pD', 'd', 1], ['#pH', 'h', 1]]) {
+  $(id).addEventListener('change', e => {
+    const v = Math.max(min, Math.min(1000, +e.target.value || min));
+    e.target.value = v; updateSel(it => it[key] = v, true); commit();
+  });
+}
+$('#pElev').addEventListener('change', e => { const v = Math.max(0, Math.min(250, +e.target.value || 0)); e.target.value = v; updateSel(it => it.elev = v); commit(); });
+$('#pRot').addEventListener('input', e => { updateSel(it => it.rot = normRot(+e.target.value)); $('#pRotVal').textContent = e.target.value + '°'; });
+$('#pRot').addEventListener('change', () => commit());
+$('#pColor').addEventListener('input', e => updateSel(it => it.color = e.target.value, true));
+$('#pColor').addEventListener('change', () => commit());
+$('#pColor2').addEventListener('input', e => updateSel(it => it.color2 = e.target.value, true));
+$('#pColor2').addEventListener('change', () => commit());
+$('#pResetColor').onclick = () => { updateSel(it => { const d = CATALOG[it.type]; it.color = d.color; it.color2 = d.color2 || null; }, true); select(selId); commit(); };
+
+function rotateSel(delta) { if (!selItem()) return; updateSel(it => it.rot = normRot(it.rot + delta)); select(selId); commit(); }
+function deleteSel() {
+  const it = selItem(); if (!it) return;
+  const g = objs.get(it.id); furnRoot.remove(g); disposeObj(g); objs.delete(it.id);
+  items = items.filter(i => i !== it); select(null); commit();
+}
+function duplicateSel() {
+  const it = selItem(); if (!it) return;
+  const c = { ...it, id: newId(), x: it.x + 30, z: it.z + 30 };
+  items.push(c); syncObj(c); select(c.id); commit();
+}
+$('#pRotL').onclick = () => rotateSel(-90);
+$('#pRotR').onclick = () => rotateSel(90);
+$('#pDup').onclick = duplicateSel;
+$('#pDel').onclick = deleteSel;
+$('#pClose').onclick = () => select(null);
+
+// ── 拖曳互動 ─────────────────────────────────────────────
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+function setRay(e) {
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, cam);
+}
+function pick(e) {
+  setRay(e);
+  const hit = ray.intersectObjects(furnRoot.children, true).find(h => h.object.userData.fid);
+  return hit ? hit.object.userData.fid : null;
+}
+function floorPoint(e) {
+  setRay(e);
+  const p = new THREE.Vector3();
+  return ray.ray.intersectPlane(floorPlane, p) ? p : null;
+}
+
+let snapOn = true;
+function halfExtents(it) {
+  const a = deg(it.rot), c = Math.abs(Math.cos(a)), s = Math.abs(Math.sin(a));
+  return [(it.w * c + it.d * s) / 2, (it.w * s + it.d * c) / 2];
+}
+const SNAP_SURFACES = [...P.WALLS, ...P.PARAPETS, ...P.OPENINGS.filter(o => o.kind !== 'door').map(o => o.r)].map(rectCm);
+function snapPos(it, x, z) {
+  if (!snapOn) return [x, z];
+  x = Math.round(x / 5) * 5; z = Math.round(z / 5) * 5;
+  if (it.rot % 90 !== 0) return [x, z];
+  const [hx, hz] = halfExtents(it), SN = 14;
+  let bx = SN, bz = SN, sx = x, sz = z;
+  for (const r of SNAP_SURFACES) {
+    if (z + hz > r.z1 + 1 && z - hz < r.z2 - 1) {
+      const d1 = Math.abs(x - hx - r.x2), d2 = Math.abs(x + hx - r.x1);
+      if (d1 < bx) { bx = d1; sx = r.x2 + hx; }
+      if (d2 < bx) { bx = d2; sx = r.x1 - hx; }
+    }
+    if (x + hx > r.x1 + 1 && x - hx < r.x2 - 1) {
+      const d1 = Math.abs(z - hz - r.z2), d2 = Math.abs(z + hz - r.z1);
+      if (d1 < bz) { bz = d1; sz = r.z2 + hz; }
+      if (d2 < bz) { bz = d2; sz = r.z1 - hz; }
+    }
+  }
+  return [round1(sx), round1(sz)];
+}
+const clampX = v => Math.max(BX0 - 200, Math.min(BX1 + 200, v));
+const clampZ = v => Math.max(BZ0 - 200, Math.min(BZ1 + 200, v));
+
+let drag = null, down = null;
+viewport.addEventListener('pointerdown', e => {
+  if (mode === 'walk' || e.target !== renderer.domElement) return;
+  down = { x: e.clientX, y: e.clientY };
+  if (e.button !== 0) return;
+  const id = pick(e);
+  if (!id) return;
+  e.stopPropagation(); // 不交給 OrbitControls
+  select(id);
+  const it = selItem(), p = floorPoint(e);
+  if (!p) return;
+  drag = { id, ox: it.x - p.x, oz: it.z - p.z, moved: false, pid: e.pointerId };
+  renderer.domElement.setPointerCapture(e.pointerId);
+  viewport.classList.add('dragging');
+}, true);
+
+window.addEventListener('pointermove', e => {
+  if (mode === 'walk') return;
+  if (drag && e.pointerId === drag.pid) {
+    const p = floorPoint(e); if (!p) return;
+    const it = selItem();
+    const [x, z] = snapPos(it, clampX(p.x + drag.ox), clampZ(p.z + drag.oz));
+    if (x !== it.x || z !== it.z) { it.x = x; it.z = z; placeObj(it); syncHelper(); drag.moved = true; showCoords(it); }
+    return;
+  }
+  if (e.target === renderer.domElement && e.pointerType === 'mouse' && !e.buttons) hoverCheck(e);
+});
+let hoverT = 0;
+function hoverCheck(e) {
+  const now = performance.now(); if (now - hoverT < 50) return; hoverT = now;
+  viewport.classList.toggle('hover-item', !!pick(e));
+}
+window.addEventListener('pointerup', e => {
+  if (drag && e.pointerId === drag.pid) {
+    if (drag.moved) commit();
+    drag = null; viewport.classList.remove('dragging'); hideCoords();
+    return;
+  }
+  if (down && e.target === renderer.domElement && mode !== 'walk') {
+    const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
+    if (moved < 5 && e.button === 0 && !pick(e)) select(null);
+  }
+  down = null;
+});
+
+const coordEl = $('#coords');
+function showCoords(it) { coordEl.hidden = false; coordEl.textContent = `X ${Math.round(it.x)}  ·  Y ${Math.round(it.z)} cm`; }
+function hideCoords() { coordEl.hidden = true; }
+
+// ── 家具庫 ───────────────────────────────────────────────
+function addFurniture(type, at) {
+  let x, z;
+  if (at) { x = at.x; z = at.z; } else { const t = ctrl.target; x = t.x; z = t.z; }
+  const it = makeItem(type, 0, 0);
+  [it.x, it.z] = snapPos(it, clampX(x), clampZ(z));
+  items.push(it); syncObj(it); select(it.id); commit();
+  if (matchMedia('(max-width: 820px)').matches) document.body.classList.remove('lib-open');
+}
+
+function renderThumbs() {
+  const r = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+  r.setSize(150, 150); r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.05;
+  const sc = new THREE.Scene();
+  sc.environment = scene.environment;
+  sc.add(new THREE.HemisphereLight('#ffffff', '#bbb', 0.7));
+  const dl = new THREE.DirectionalLight('#fff', 1.4); dl.position.set(1, 2, 1.5); sc.add(dl);
+  const c = new THREE.PerspectiveCamera(30, 1, 1, 5000);
+  const out = {};
+  for (const [type, def] of Object.entries(CATALOG)) {
+    const g = buildFurniture({ id: '_', type, w: def.w, d: def.d, h: def.h });
+    sc.add(g);
+    const box = new THREE.Box3().setFromObject(g), size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
+    const rad = size.length() / 2;
+    const dir = new THREE.Vector3(0.8, 0.75, 1.1).normalize();
+    c.position.copy(ctr).addScaledVector(dir, rad / Math.sin(deg(15)) * 1.02); c.lookAt(ctr);
+    r.render(sc, c);
+    out[type] = r.domElement.toDataURL();
+    sc.remove(g); disposeObj(g);
+  }
+  r.dispose(); r.forceContextLoss();
+  return out;
+}
+
+function buildLibrary() {
+  const thumbs = renderThumbs();
+  const tabs = $('#catTabs'), grid = $('#libGrid');
+  let cat = 'all', q = '';
+  const draw = () => {
+    grid.innerHTML = '';
+    for (const [type, def] of Object.entries(CATALOG)) {
+      if (cat !== 'all' && def.cat !== cat) continue;
+      if (q && !def.name.includes(q)) continue;
+      const b = document.createElement('button');
+      b.className = 'lib-item'; b.draggable = true; b.title = `${def.name}  ${def.w}×${def.d}×${def.h} cm`;
+      b.innerHTML = `<img src="${thumbs[type]}" alt=""><span>${def.name}</span><small>${def.w}×${def.d}</small>`;
+      b.onclick = () => addFurniture(type);
+      b.addEventListener('dragstart', e => { e.dataTransfer.setData('text/fp3d', type); e.dataTransfer.effectAllowed = 'copy'; });
+      grid.appendChild(b);
+    }
+  };
+  const mk = (key, label) => {
+    const b = document.createElement('button'); b.textContent = label; b.dataset.cat = key;
+    b.onclick = () => { cat = key; $$('#catTabs button').forEach(x => x.classList.toggle('on', x === b)); draw(); };
+    tabs.appendChild(b); return b;
+  };
+  mk('all', '全部').classList.add('on');
+  CATEGORIES.forEach(c => mk(c, c));
+  $('#libSearch').addEventListener('input', e => { q = e.target.value.trim(); draw(); });
+  draw();
+}
+viewport.addEventListener('dragover', e => { if (e.dataTransfer.types.includes('text/fp3d')) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+viewport.addEventListener('drop', e => {
+  const type = e.dataTransfer.getData('text/fp3d');
+  if (!type || !CATALOG[type] || mode === 'walk') return;
+  e.preventDefault();
+  const p = floorPoint(e); addFurniture(type, p);
+});
+
+// ── 視角 ─────────────────────────────────────────────────
+let tween = null;
+function tweenTo(camPos, target, dur = 700, zoom) {
+  const c = cam;
+  tween = { c, t0: performance.now(), dur, p0: c.position.clone(), p1: camPos.clone(), g0: ctrl.target.clone(), g1: target.clone(), z0: c.zoom, z1: zoom ?? c.zoom };
+}
+function setMode(m) {
+  if (m === mode) return;
+  if (mode === 'walk') exitWalk();
+  mode = m;
+  $$('.view-btn').forEach(b => b.classList.toggle('on', b.dataset.view === m));
+  document.body.dataset.mode = m;
+  ctrlP.enabled = m === '3d'; ctrlO.enabled = m === 'top';
+  if (m === '3d') { cam = persp; ctrl = ctrlP; }
+  if (m === 'top') { cam = ortho; ctrl = ctrlO; }
+  if (m === 'walk') enterWalk();
+  tween = null;
+}
+$$('.view-btn').forEach(b => b.onclick = () => setMode(b.dataset.view));
+
+function flyToRoom(room) {
+  const [x, z] = room._center;
+  const xs = room._pts.map(p => p[0]), zs = room._pts.map(p => p[1]);
+  const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
+  if (mode === 'walk') { walk.pos.set(x, EYE, z); return; }
+  if (mode === 'top') { const zoom = Math.min(4, (ortho.top * 1.6) / (span + 120)); tweenTo(new THREE.Vector3(x, 3000, z), new THREE.Vector3(x, 0, z), 600, zoom); return; }
+  const dist = span * 1.5 + 250;
+  tweenTo(new THREE.Vector3(x + dist * 0.15, dist * 0.95, z + dist * 0.7), new THREE.Vector3(x, 0, z));
+  if (matchMedia('(max-width: 820px)').matches) document.body.classList.remove('lib-open');
+}
+function resetView() {
+  if (mode === 'top') tweenTo(new THREE.Vector3(CX, 3000, CZ), new THREE.Vector3(CX, 0, CZ), 600, 1);
+  else if (mode === '3d') tweenTo(homePos(), new THREE.Vector3(CX, 0, CZ));
+}
+$('#btnFit').onclick = resetView;
+
+// ── 漫遊 ─────────────────────────────────────────────────
+const EYE = 155;
+const walk = { pos: new THREE.Vector3(), yaw: 0, pitch: 0, keys: {}, saved: null, look: null };
+function enterWalk() {
+  walk.saved = { p: persp.position.clone(), t: ctrlP.target.clone() };
+  cam = persp; ctrl = ctrlP; ctrlP.enabled = false;
+  walk.pos.set(P.cx(560), EYE, P.cz(760));
+  walk.yaw = deg(-12); walk.pitch = -0.08;
+  persp.fov = 65; persp.updateProjectionMatrix();
+  select(null);
+  toast(matchMedia('(pointer: coarse)').matches ? '拖曳畫面轉向，用方向鍵移動' : '點畫面鎖定滑鼠 · WASD 移動 · Shift 加速 · Esc 釋放');
+}
+function exitWalk() {
+  if (document.pointerLockElement) document.exitPointerLock();
+  persp.fov = 40; persp.updateProjectionMatrix();
+  if (walk.saved) { persp.position.copy(walk.saved.p); ctrlP.target.copy(walk.saved.t); }
+  ctrlP.update();
+}
+renderer.domElement.addEventListener('click', () => {
+  if (mode === 'walk' && !matchMedia('(pointer: coarse)').matches && !document.pointerLockElement) renderer.domElement.requestPointerLock?.();
+});
+document.addEventListener('mousemove', e => {
+  if (mode !== 'walk' || document.pointerLockElement !== renderer.domElement) return;
+  walk.yaw -= e.movementX * 0.0022; walk.pitch = Math.max(-1.3, Math.min(1.3, walk.pitch - e.movementY * 0.0022));
+});
+renderer.domElement.addEventListener('pointerdown', e => { if (mode === 'walk' && e.pointerType !== 'mouse') walk.look = { x: e.clientX, y: e.clientY }; });
+renderer.domElement.addEventListener('pointermove', e => {
+  if (mode !== 'walk' || !walk.look) return;
+  walk.yaw += (e.clientX - walk.look.x) * 0.005; walk.pitch = Math.max(-1.3, Math.min(1.3, walk.pitch + (e.clientY - walk.look.y) * 0.005));
+  walk.look = { x: e.clientX, y: e.clientY };
+});
+window.addEventListener('pointerup', () => { walk.look = null; });
+$$('#walkPad button').forEach(b => {
+  const k = b.dataset.k;
+  b.addEventListener('pointerdown', e => { e.preventDefault(); walk.keys[k] = true; });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => { walk.keys[k] = false; });
+});
+function blocked(x, z) {
+  const R = 18;
+  return colliders.some(r => x > r.x1 - R && x < r.x2 + R && z > r.z1 - R && z < r.z2 + R);
+}
+function updateWalk(dt) {
+  const k = walk.keys, f = (k.w || k.ArrowUp ? 1 : 0) - (k.s || k.ArrowDown ? 1 : 0), s = (k.d || k.ArrowRight ? 1 : 0) - (k.a || k.ArrowLeft ? 1 : 0);
+  if (f || s) {
+    const sp = (k.Shift ? 320 : 160) * dt;
+    const fx = -Math.sin(walk.yaw), fz = -Math.cos(walk.yaw);
+    const dx = (fx * f - fz * s), dz = (fz * f + fx * s), n = Math.hypot(dx, dz) || 1;
+    const nx = walk.pos.x + (dx / n) * sp, nz = walk.pos.z + (dz / n) * sp;
+    if (!blocked(nx, walk.pos.z)) walk.pos.x = nx;
+    if (!blocked(walk.pos.x, nz)) walk.pos.z = nz;
+  }
+  persp.position.copy(walk.pos);
+  persp.rotation.set(walk.pitch, walk.yaw, 0, 'YXZ');
+}
+
+// ── 鍵盤 ─────────────────────────────────────────────────
+window.addEventListener('keydown', e => {
+  if (e.target.closest?.('input, textarea, select')) return;
+  const mod = e.ctrlKey || e.metaKey;
+  if (mode === 'walk') {
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    walk.keys[key] = true;
+    if (e.key.startsWith('Arrow')) e.preventDefault();
+  }
+  if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+  if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSel(); return; }
+  if (mod) return;
+  if (e.key === 't' || e.key === 'T') { setMode(mode === '3d' ? 'top' : '3d'); return; }
+  if (mode === 'walk') return;
+  const it = selItem();
+  switch (e.key) {
+    case 'r': rotateSel(90); break;
+    case 'R': rotateSel(-90); break;
+    case 'q': case 'Q': rotateSel(-15); break;
+    case 'e': case 'E': rotateSel(15); break;
+    case 'Delete': case 'Backspace': if (it) { e.preventDefault(); deleteSel(); } break;
+    case 'Escape': select(null); break;
+    case 'f': case 'F': resetView(); break;
+    case 'ArrowUp': case 'ArrowDown': case 'ArrowLeft': case 'ArrowRight': {
+      if (!it) return;
+      e.preventDefault();
+      const st = e.shiftKey ? 1 : 5;
+      const d = { ArrowUp: [0, -st], ArrowDown: [0, st], ArrowLeft: [-st, 0], ArrowRight: [st, 0] }[e.key];
+      it.x = round1(it.x + d[0]); it.z = round1(it.z + d[1]); placeObj(it); syncHelper();
+      clearTimeout(nudgeT); nudgeT = setTimeout(() => commit(), 400);
+    }
+  }
+});
+let nudgeT;
+window.addEventListener('keyup', e => {
+  const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  walk.keys[key] = false;
+  if (e.key === 'Shift') walk.keys.Shift = false;
+});
+window.addEventListener('blur', () => { walk.keys = {}; });
+
+// ── 工具列 ───────────────────────────────────────────────
+$$('.wall-btn').forEach(b => b.onclick = () => {
+  wallHeight = +b.dataset.h;
+  $$('.wall-btn').forEach(x => x.classList.toggle('on', x === b));
+  buildWalls();
+});
+$('#tglLabels').onchange = e => { labelGroup.visible = e.target.checked; labelRenderer.domElement.style.display = e.target.checked ? '' : 'none'; };
+$('#tglPlan').onchange = e => { overlay.visible = e.target.checked; };
+$('#tglSnap').onchange = e => { snapOn = e.target.checked; };
+$('#btnUndo').onclick = undo;
+$('#btnRedo').onclick = redo;
+$('#btnReset').onclick = () => {
+  if (!confirm('要還原成預設的家具配置嗎？目前的擺設會被取代（可用「復原」找回）。')) return;
+  setItems(defaultLayout()); commit(); toast('已還原預設配置');
+};
+$('#btnClear').onclick = () => {
+  if (!confirm('清空所有家具？（可用「復原」找回）')) return;
+  setItems([]); commit();
+};
+$('#btnShot').onclick = () => {
+  selHelper.visible = false;
+  renderer.render(scene, cam);
+  const url = renderer.domElement.toDataURL('image/png');
+  selHelper.visible = true;
+  download(url, 'floorplan-3d.png');
+};
+$('#btnExport').onclick = () => {
+  const blob = new Blob([JSON.stringify({ v: 1, items }, null, 1)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob); download(url, 'floorplan-layout.json'); setTimeout(() => URL.revokeObjectURL(url), 2000);
+};
+$('#btnImport').onclick = () => $('#fileImport').click();
+$('#fileImport').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const data = JSON.parse(await f.text());
+    if (!Array.isArray(data.items)) throw new Error('格式不符');
+    setItems(data.items.map(sanitize).filter(Boolean)); commit(); toast('已匯入配置');
+  } catch (err) { toast('匯入失敗：' + err.message); }
+  e.target.value = '';
+};
+$('#btnShare').onclick = async () => {
+  try {
+    const code = await encodeLayout(items);
+    const url = location.origin + location.pathname + '#L=' + code;
+    await navigator.clipboard?.writeText(url).catch(() => {});
+    $('#shareUrl').value = url;
+    $('#shareDlg').showModal();
+  } catch (err) { toast('產生連結失敗：' + err.message); }
+};
+$('#shareCopy').onclick = async () => {
+  const inp = $('#shareUrl'); inp.select();
+  try { await navigator.clipboard.writeText(inp.value); toast('已複製連結'); } catch { document.execCommand('copy'); toast('已複製連結'); }
+};
+$('#btnRef').onclick = () => $('#refDlg').showModal();
+$$('dialog .dlg-close').forEach(b => b.onclick = () => b.closest('dialog').close());
+$('#btnHelp').onclick = () => $('#helpDlg').showModal();
+$('#btnLib').onclick = () => document.body.classList.toggle('lib-open');
+$('#libScrim').onclick = () => document.body.classList.remove('lib-open');
+$('#btnMore').onclick = e => { e.stopPropagation(); document.body.classList.toggle('more-open'); };
+document.addEventListener('click', e => { if (!e.target.closest('#moreMenu')) document.body.classList.remove('more-open'); });
+
+function download(url, name) { const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+let toastT;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 2600); }
+
+// ── 分享連結編碼 ─────────────────────────────────────────
+const KEYS = ['type', 'x', 'z', 'w', 'd', 'h', 'rot', 'elev', 'color', 'color2', 'name'];
+function sanitize(o) {
+  if (!o || !CATALOG[o.type]) return null;
+  const def = CATALOG[o.type], num = (v, d) => (Number.isFinite(+v) ? +v : d);
+  const color = /^#[0-9a-f]{6}$/i.test(o.color) ? o.color : def.color;
+  const color2 = /^#[0-9a-f]{6}$/i.test(o.color2) ? o.color2 : (def.color2 || null);
+  return { id: newId(), type: o.type, x: num(o.x, CX), z: num(o.z, CZ), w: num(o.w, def.w), d: num(o.d, def.d), h: num(o.h, def.h),
+    rot: normRot(num(o.rot, 0)), elev: num(o.elev, 0), color, color2, name: String(o.name ?? def.name).slice(0, 40) };
+}
+async function encodeLayout(list) {
+  const rows = list.map(it => KEYS.map(k => {
+    const v = it[k], def = CATALOG[it.type];
+    if (k === 'name' && v === def.name) return 0;
+    if (k === 'color' && v === def.color) return 0;
+    if (k === 'color2' && (v === def.color2 || !v)) return 0;
+    return typeof v === 'number' ? Math.round(v) : v;
+  }));
+  const bytes = new TextEncoder().encode(JSON.stringify(rows));
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
+  const buf = new Uint8Array(await new Response(stream).arrayBuffer());
+  let s = ''; buf.forEach(b => s += String.fromCharCode(b));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+async function decodeLayout(code) {
+  const b = atob(code.replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = Uint8Array.from(b, c => c.charCodeAt(0));
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  const rows = JSON.parse(await new Response(stream).text());
+  return rows.map(r => { const o = {}; KEYS.forEach((k, i) => { if (r[i] !== 0 || ['x', 'z', 'rot', 'elev'].includes(k)) o[k] = r[i]; }); return sanitize(o); }).filter(Boolean);
+}
+
+// ── 迴圈 ─────────────────────────────────────────────────
+const clock = new THREE.Clock();
+function loop() {
+  const dt = Math.min(clock.getDelta(), 0.1);
+  if (tween) {
+    const t = Math.min(1, (performance.now() - tween.t0) / tween.dur), k = 1 - Math.pow(1 - t, 3);
+    tween.c.position.lerpVectors(tween.p0, tween.p1, k);
+    ctrl.target.lerpVectors(tween.g0, tween.g1, k);
+    if (tween.c.isOrthographicCamera) { tween.c.zoom = tween.z0 + (tween.z1 - tween.z0) * k; tween.c.updateProjectionMatrix(); }
+    if (t >= 1) tween = null;
+  }
+  if (mode === 'walk') updateWalk(dt); else ctrl.update();
+  renderer.render(scene, cam);
+  labelRenderer.render(scene, cam);
+  requestAnimationFrame(loop);
+}
+
+// ── 啟動 ─────────────────────────────────────────────────
+async function init() {
+  let list = null, fromShare = false;
+  const m = location.hash.match(/#L=([\w-]+)/);
+  if (m) { try { list = await decodeLayout(m[1]); fromShare = true; } catch { toast('分享連結無法讀取，改用本機配置'); } }
+  if (!list) {
+    try { const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); if (s && Array.isArray(s.items)) list = s.items.map(sanitize).filter(Boolean); } catch { /* 忽略 */ }
+  }
+  setItems(list || defaultLayout());
+  commit(!fromShare ? true : false);
+  if (fromShare) { toast('已載入分享的配置（修改後會存到你的瀏覽器）'); window.history.replaceState(null, "", location.pathname); }
+  buildLibrary();
+  document.body.classList.add('ready');
+  loop();
+}
+init();
