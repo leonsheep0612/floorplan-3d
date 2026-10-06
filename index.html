@@ -34,6 +34,10 @@
     <button id="btnUndo" class="icon-btn" title="復原 (Ctrl+Z)" aria-label="復原"><svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg></button>
     <button id="btnRedo" class="icon-btn" title="重做 (Ctrl+Shift+Z)" aria-label="重做"><svg viewBox="0 0 24 24"><path d="m15 14 5-5-5-5"/><path d="M20 9H10a6 6 0 0 0 0 12h3"/></svg></button>
     <button id="btnFit" class="icon-btn" title="重設視角 (F)" aria-label="重設視角"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <button id="btnPlans" class="btn plan-btn" title="我的方案 (Ctrl+S 快速儲存)">
+      <svg viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg>
+      <span class="plan-btn-txt"><b>方案</b><small id="planState">未儲存</small></span>
+    </button>
     <button id="btnShare" class="btn primary" title="產生分享連結">分享</button>
     <div id="moreMenu" class="more">
       <button id="btnMore" class="icon-btn" aria-label="更多"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg></button>
@@ -127,6 +131,17 @@
   </div>
 </section>
 
+<dialog id="plansDlg" class="dlg plans-dlg">
+  <h3>我的方案</h3>
+  <p>把目前的擺設存成方案，之後可以隨時切換、比較或回到某一版。方案存在這個瀏覽器裡。</p>
+  <form id="planForm" class="plan-new">
+    <input id="planName" maxlength="30" placeholder="方案名稱，例如：現況、方案 A" aria-label="方案名稱">
+    <button class="btn primary" type="submit">存成新方案</button>
+  </form>
+  <div id="planList" class="plan-list"></div>
+  <div class="dlg-foot"><button class="btn dlg-close" type="button">關閉</button></div>
+</dialog>
+
 <dialog id="shareDlg" class="dlg">
   <h3>分享這個配置</h3>
   <p>連結裡包含目前所有家具的位置，任何人打開都會看到相同擺設（不會影響你自己的版本）。</p>
@@ -203,6 +218,14 @@
     <article data-g="save">
       <h4>自動儲存</h4>
       <p>每次修改都會自動存在<b>目前這台裝置的這個瀏覽器</b>，關掉再開還在。</p>
+      <h4>存成方案（右上「方案」）</h4>
+      <ul>
+        <li>輸入名稱後按 <b>「存成新方案」</b>，例如「現況」「方案 A」。</li>
+        <li><b>載入</b>：切換到該方案的擺設（可用復原找回切換前的樣子）。</li>
+        <li><b>更新</b>：用目前的擺設覆蓋該方案。</li>
+        <li>按鈕上會顯示目前的方案名稱；顯示「已修改」表示有改動還沒存進方案。</li>
+        <li>快捷鍵 <kbd>Ctrl</kbd>+<kbd>S</kbd>：直接更新目前的方案。</li>
+      </ul>
       <h4>要注意</h4>
       <ul>
         <li>換手機、換電腦或換瀏覽器看不到，要用「分享」連結帶過去。</li>
@@ -211,8 +234,8 @@
       </ul>
       <h4>備份與還原（右上 ⋯ 選單）</h4>
       <ul>
-        <li><b>匯出配置 JSON</b>：下載成檔案備份。</li>
-        <li><b>匯入配置 JSON</b>：從檔案還原。</li>
+        <li><b>匯出配置 JSON</b>：下載成檔案備份（包含所有方案）。</li>
+        <li><b>匯入配置 JSON</b>：從檔案還原，檔案裡的方案會加進方案清單。</li>
         <li><b>下載截圖 PNG</b>：存目前畫面。</li>
         <li><b>還原預設配置</b>：回到一開始的擺設。</li>
       </ul>
@@ -241,6 +264,7 @@
         <tr><td>方向鍵</td><td>微調 5cm（加 Shift 為 1cm）</td></tr>
         <tr><td><kbd>Delete</kbd></td><td>刪除選取家具</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>複製</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>更新目前的方案</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>復原</td></tr>
         <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>重做</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>取消選取</td></tr>

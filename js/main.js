@@ -333,6 +333,7 @@ function commit(save = true) {
   hIndex = hist.length - 1;
   if (save) persist();
   updateUndo();
+  updatePlanState();
 }
 function persist() {
   try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 2, items })); } catch { /* 私密模式等 */ }
@@ -342,7 +343,7 @@ function restore(i) {
   const keep = selId;
   setItems(JSON.parse(hist[i]));
   if (items.some(it => it.id === keep)) select(keep);
-  persist(); updateUndo();
+  persist(); updateUndo(); updatePlanState();
 }
 const undo = () => hIndex > 0 && restore(hIndex - 1);
 const redo = () => hIndex < hist.length - 1 && restore(hIndex + 1);
@@ -679,6 +680,7 @@ window.addEventListener('keydown', e => {
   if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
   if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
   if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSel(); return; }
+  if (mod && e.key.toLowerCase() === 's') { e.preventDefault(); quickSavePlan(); return; }
   if (mod) return;
   if (e.key === 't' || e.key === 'T') { setMode(mode === '3d' ? 'top' : '3d'); return; }
   if (mode === 'walk') return;
@@ -736,7 +738,7 @@ $('#btnShot').onclick = () => {
   download(url, 'floorplan-3d.png');
 };
 $('#btnExport').onclick = () => {
-  const blob = new Blob([JSON.stringify({ v: 1, items }, null, 1)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ v: 2, items, plans }, null, 1)], { type: 'application/json' });
   const url = URL.createObjectURL(blob); download(url, 'floorplan-layout.json'); setTimeout(() => URL.revokeObjectURL(url), 2000);
 };
 $('#btnImport').onclick = () => $('#fileImport').click();
@@ -745,7 +747,9 @@ $('#fileImport').onchange = async e => {
   try {
     const data = JSON.parse(await f.text());
     if (!Array.isArray(data.items)) throw new Error('格式不符');
-    setItems(data.items.map(sanitize).filter(Boolean)); commit(); toast('已匯入配置');
+    const added = importPlans(data.plans);
+    setItems(data.items.map(sanitize).filter(Boolean)); commit();
+    toast(added ? `已匯入配置與 ${added} 個方案` : '已匯入配置');
   } catch (err) { toast('匯入失敗：' + err.message); }
   e.target.value = '';
 };
@@ -843,6 +847,148 @@ async function decodeLayout(code) {
   const rows = JSON.parse(await new Response(stream).text());
   return rows.map(r => { const o = {}; KEYS.forEach((k, i) => { if (r[i] !== 0 || ['x', 'z', 'rot', 'elev'].includes(k)) o[k] = r[i]; }); return sanitize(o); }).filter(Boolean);
 }
+
+// ── 方案 ─────────────────────────────────────────────────
+const PLANS_KEY = 'fp3d.plans', ACTIVE_KEY = 'fp3d.activePlan';
+let plans = [], activePlan = null;
+try {
+  const p = JSON.parse(localStorage.getItem(PLANS_KEY) || '[]');
+  if (Array.isArray(p)) plans = p.filter(x => x && Array.isArray(x.items));
+  activePlan = localStorage.getItem(ACTIVE_KEY);
+  if (!plans.some(x => x.id === activePlan)) activePlan = null;
+} catch { /* 忽略 */ }
+
+function savePlans() {
+  try {
+    localStorage.setItem(PLANS_KEY, JSON.stringify(plans));
+    if (activePlan) localStorage.setItem(ACTIVE_KEY, activePlan); else localStorage.removeItem(ACTIVE_KEY);
+    return true;
+  } catch { toast('瀏覽器儲存空間不足，請刪除一些方案'); return false; }
+}
+const layoutSig = list => JSON.stringify(list.map(it => KEYS.map(k => (typeof it[k] === 'number' ? Math.round(it[k] * 10) / 10 : (it[k] ?? null)))));
+const cloneItems = () => JSON.parse(JSON.stringify(items));
+const getPlan = id => plans.find(p => p.id === id);
+const planDirty = () => { const p = getPlan(activePlan); return !p || layoutSig(p.items) !== layoutSig(items); };
+
+function updatePlanState() {
+  const el = $('#planState'), p = getPlan(activePlan);
+  if (!p) { el.textContent = plans.length ? '未存成方案' : '未儲存'; el.className = ''; return; }
+  const dirty = planDirty();
+  el.textContent = p.name + (dirty ? ' · 已修改' : '');
+  el.className = dirty ? 'dirty' : 'clean';
+}
+
+function planThumb() {
+  const vis = selHelper.visible; selHelper.visible = false;
+  renderer.render(scene, cam);
+  const src = renderer.domElement, W = 240, H = 150;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ece8e1'; g.fillRect(0, 0, W, H);
+  const s = Math.max(W / src.width, H / src.height) * 1.15, w = src.width * s, h = src.height * s;
+  g.drawImage(src, (W - w) / 2, (H - h) / 2, w, h);
+  selHelper.visible = vis;
+  return c.toDataURL('image/jpeg', 0.72);
+}
+
+function saveNewPlan(name) {
+  name = (name || '').trim() || `方案 ${plans.length + 1}`;
+  const p = { id: 'p' + Date.now().toString(36), name: name.slice(0, 30), items: cloneItems(), savedAt: Date.now(), thumb: planThumb() };
+  const prev = activePlan;
+  plans.unshift(p); activePlan = p.id;
+  if (!savePlans()) { plans.shift(); activePlan = prev; return; }
+  renderPlans(); updatePlanState(); toast(`已存成「${p.name}」`);
+}
+function overwritePlan(id, ask = true) {
+  const p = getPlan(id); if (!p) return;
+  if (ask && !confirm(`用目前的擺設覆蓋「${p.name}」？`)) return;
+  const old = { items: p.items, savedAt: p.savedAt, thumb: p.thumb }, prev = activePlan;
+  Object.assign(p, { items: cloneItems(), savedAt: Date.now(), thumb: planThumb() });
+  activePlan = id;
+  if (!savePlans()) { Object.assign(p, old); activePlan = prev; return; }
+  renderPlans(); updatePlanState(); toast(`已更新「${p.name}」`);
+}
+function loadPlan(id) {
+  const p = getPlan(id); if (!p) return;
+  if (planDirty() && layoutSig(p.items) !== layoutSig(items)) {
+    const cur = getPlan(activePlan);
+    const what = cur ? `「${cur.name}」有還沒存進方案的修改` : '目前的擺設還沒存成方案';
+    if (!confirm(`${what}，載入「${p.name}」後會被取代（可按復原找回）。要繼續嗎？`)) return;
+  }
+  setItems(p.items.map(sanitize).filter(Boolean));
+  activePlan = id; savePlans();
+  commit(); renderPlans(); toast(`已載入「${p.name}」`);
+}
+function renamePlan(id) {
+  const p = getPlan(id); if (!p) return;
+  const n = prompt('方案名稱', p.name);
+  if (n == null || !n.trim()) return;
+  p.name = n.trim().slice(0, 30); savePlans(); renderPlans(); updatePlanState();
+}
+function deletePlan(id) {
+  const p = getPlan(id); if (!p) return;
+  if (!confirm(`刪除方案「${p.name}」？目前畫面上的擺設不會受影響。`)) return;
+  plans = plans.filter(x => x !== p);
+  if (activePlan === id) activePlan = null;
+  savePlans(); renderPlans(); updatePlanState();
+}
+function quickSavePlan() {
+  if (getPlan(activePlan)) overwritePlan(activePlan, false); else openPlans();
+}
+function importPlans(list) {
+  if (!Array.isArray(list)) return 0;
+  let n = 0;
+  for (const x of list) {
+    if (!x || !Array.isArray(x.items)) continue;
+    plans.push({
+      id: 'p' + Date.now().toString(36) + n++, name: String(x.name || '匯入的方案').slice(0, 30),
+      items: x.items.map(sanitize).filter(Boolean), savedAt: Number(x.savedAt) || Date.now(),
+      thumb: typeof x.thumb === 'string' && x.thumb.startsWith('data:image/') ? x.thumb : '',
+    });
+  }
+  if (n) { savePlans(); renderPlans(); }
+  return n;
+}
+
+const fmtTime = t => new Date(t).toLocaleString('zh-TW', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+function renderPlans() {
+  const box = $('#planList');
+  box.innerHTML = '';
+  $('#planName').placeholder = `方案名稱，例如：方案 ${plans.length + 1}`;
+  if (!plans.length) {
+    box.innerHTML = '<div class="plan-empty">還沒有方案。輸入名稱後按「存成新方案」，就能把目前的擺設留下來。</div>';
+    return;
+  }
+  const dirty = planDirty();
+  for (const p of plans) {
+    const on = p.id === activePlan;
+    const row = document.createElement('div');
+    row.className = 'plan-item' + (on ? ' on' : '');
+    const img = document.createElement('div');
+    img.className = 'plan-thumb';
+    if (p.thumb) img.style.backgroundImage = `url("${p.thumb}")`;
+    const meta = document.createElement('div');
+    meta.className = 'plan-meta';
+    const b = document.createElement('b');
+    b.textContent = p.name;
+    if (on) { const tag = document.createElement('span'); tag.className = 'plan-tag'; tag.textContent = dirty ? '使用中 · 已修改' : '使用中'; b.append(' ', tag); }
+    const sm = document.createElement('small');
+    sm.textContent = `${fmtTime(p.savedAt)} · ${p.items.length} 件家具`;
+    meta.append(b, sm);
+    const acts = document.createElement('div');
+    acts.className = 'plan-acts';
+    const mk = (label, fn, cls = '') => { const x = document.createElement('button'); x.type = 'button'; x.className = 'btn ' + cls; x.textContent = label; x.onclick = fn; acts.appendChild(x); };
+    mk('載入', () => loadPlan(p.id), on ? '' : 'primary');
+    mk('更新', () => overwritePlan(p.id));
+    mk('改名', () => renamePlan(p.id), 'ghost');
+    mk('刪除', () => deletePlan(p.id), 'ghost danger');
+    row.append(img, meta, acts);
+    box.appendChild(row);
+  }
+}
+function openPlans() { renderPlans(); $('#planName').value = ''; $('#plansDlg').showModal(); }
+$('#btnPlans').onclick = openPlans;
+$('#planForm').addEventListener('submit', e => { e.preventDefault(); saveNewPlan($('#planName').value); $('#planName').value = ''; });
 
 // ── 迴圈 ─────────────────────────────────────────────────
 const clock = new THREE.Clock();
