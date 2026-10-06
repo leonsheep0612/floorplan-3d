@@ -93,6 +93,28 @@ function tvCabinet({ w, d, h, color }) {
   return g;
 }
 
+// 懸空電視櫃：木作外框、清水模灰抽屜面板、中央開放木格（離地由 elev 控制）
+function tvFloating({ w, d, h, color, color2 }) {
+  const g = new THREE.Group(), wood = mat(color2, { r: 0.6 }), front = mat(color, { r: 0.85 });
+  const t = 2.5, ih = h - 2 * t;
+  B(g, w, t, d, 0, h - t, 0, wood, 0.5);
+  B(g, w, t, d, 0, 0, 0, wood, 0.5);
+  for (const s of [-1, 1]) B(g, t, ih, d, s * (w / 2 - t / 2), t, 0, wood);
+  B(g, w - 2 * t, ih, 1.5, 0, t, -d / 2 + 0.75, mat(shade(color2, -0.12), { r: 0.7 }));
+  const nw = Math.min(70, w * 0.22), sw = (w - 2 * t - nw) / 2;
+  for (const s of [-1, 1]) B(g, 2, ih, d - 2, s * (nw / 2 + 1), t, 1, wood);
+  const groove = mat('#4a4744', { r: 0.9 });
+  for (const s of [-1, 1]) {
+    const n = sw > 100 ? 2 : 1, pw = (sw - 2) / n;
+    for (let i = 0; i < n; i++) {
+      const x = s * (nw / 2 + 2 + pw * (i + 0.5));
+      B(g, pw - 0.6, ih - 0.6, 2, x, t + 0.3, d / 2 - 1, front, 0.3);
+      B(g, pw * 0.35, 0.8, 0.4, x, h - t - 3, d / 2 + 0.05, groove, 0, false);
+    }
+  }
+  return g;
+}
+
 function tv({ w, d, h, color }) {
   const g = new THREE.Group();
   B(g, w * 0.3, 1.5, 22, 0, 0, 0, DARK());
@@ -195,6 +217,64 @@ function cabinet({ w, d, h, color }, doorW = 50) {
     const x = -w / 2 + (w / n) * (i + 0.5) + side * (w / n);
     B(g, 1.4, Math.min(22, h * 0.15), 1.4, x, hy - Math.min(11, h * 0.075), d / 2 + 0.8, METAL(), 0, false);
   }
+  return g;
+}
+
+// 開放式衣櫃：木作框架，吊掛區（吊桿＋衣物）與層板區交替
+function wardrobeOpen({ w, d, h, color, color2 }) {
+  const g = new THREE.Group(), wood = mat(color, { r: 0.6 }), back = mat(color2, { r: 0.85 }), t = 2.5;
+  B(g, w, 8, d - 2, 0, 0, -1, mat(shade(color, -0.3)));
+  B(g, w, t, d, 0, 8, 0, wood);
+  B(g, w, t, d, 0, h - t, 0, wood, 0.5);
+  B(g, w - 2 * t, h - 8 - t, 1.2, 0, 8, -d / 2 + 0.6, back);
+  const n = Math.max(1, Math.round(w / 90)), sw = (w - t) / n;
+  for (let i = 0; i <= n; i++) B(g, t, h - 8 - t, d, -w / 2 + t / 2 + sw * i, 8, 0, wood);
+  const clothes = ['#e9e4da', '#c9b8a3', '#7d8a96', '#3f4650', '#b9a089', '#f4f1ea', '#8c6d5a', '#a7b2a0'];
+  const metal = mat('#b9bcbf', { r: 0.3, m: 0.8 });
+  let k = 5;
+  for (let i = 0; i < n; i++) {
+    const x0 = -w / 2 + t + sw * i, iw = sw - t, cx = x0 + iw / 2;
+    const shelvesOnly = n >= 3 && i === Math.floor(n / 2);
+    // 頂部收納層板
+    B(g, iw, t, d - 2, cx, h - 40, 1, wood);
+    if (shelvesOnly) {
+      for (let y = 8 + t + 36; y < h - 50; y += 36) {
+        B(g, iw, t, d - 2, cx, y, 1, wood);
+        k = (k * 7 + 3) % 97;
+        B(g, iw * 0.7, 8 + (k % 6), d * 0.6, cx, y + t, 2, mat(clothes[k % clothes.length], { r: 1 }), 2);
+      }
+      continue;
+    }
+    // 下方抽屜
+    B(g, iw - 1, 26, d - 3, cx, 8 + t, 0.5, wood, 0.5);
+    B(g, iw - 1, 0.6, 0.4, cx, 8 + t + 13, d / 2 - 0.8, mat(shade(color, -0.35)), 0, false);
+    B(g, iw, t, d - 2, cx, 8 + t + 26, 1, wood);
+    // 吊桿與衣物
+    const ry = h - 48;
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, iw, 12), metal);
+    rod.rotation.z = Math.PI / 2; rod.position.set(cx, ry, 0); g.add(rod);
+    const count = Math.max(2, Math.floor((iw - 6) / 5));
+    for (let c = 0; c < count; c++) {
+      k = (k * 7 + 3) % 97;
+      const len = 70 + (k % 5) * 12, x = x0 + 4 + c * ((iw - 8) / (count - 1 || 1));
+      B(g, 1.6, len, d * 0.82, x, ry - len - 2, 0, mat(clothes[k % clothes.length], { r: 1 }), 0.6);
+    }
+  }
+  return g;
+}
+
+// 人形：身高參考
+function person({ w, d, h, color }) {
+  const g = new THREE.Group(), m = mat(color, { r: 0.7 }), s = h / 170;
+  for (const sx of [-1, 1]) C(g, 5.5 * s, 4.5 * s, 82 * s, sx * 9 * s, 0, 0, m, 14);
+  B(g, Math.min(w, 38 * s), 58 * s, Math.min(d, 22 * s), 0, 80 * s, 0, m, 9 * s);
+  for (const sx of [-1, 1]) {
+    const arm = C(g, 3.8 * s, 3.2 * s, 62 * s, sx * 22 * s, 76 * s, 0, m, 12);
+    arm.rotation.z = sx * 0.06;
+  }
+  C(g, 4.5 * s, 5 * s, 8 * s, 0, 137 * s, 0, m, 12);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(11 * s, 24, 18), m);
+  head.scale.y = 1.15; head.position.y = h - 12.5 * s; head.castShadow = true; g.add(head);
   return g;
 }
 
@@ -386,6 +466,7 @@ export const CATALOG = {
   armchair:      { name: '單人沙發', cat: '客廳', w: 85, d: 82, h: 80, color: '#cdbfa8', color2: '#6b4f36', build: sofa },
   coffee_table:  { name: '茶几', cat: '客廳', w: 100, d: 50, h: 40, color: '#c49a6c', build: coffeeTable },
   side_table:    { name: '邊几', cat: '客廳', w: 45, d: 45, h: 50, color: '#c49a6c', build: sideTable },
+  tv_floating:   { name: '懸空電視櫃', cat: '客廳', w: 280, d: 40, h: 40, elev: 25, color: '#bdbab4', color2: '#a8835e', build: tvFloating },
   tv_cabinet:    { name: '電視櫃', cat: '客廳', w: 200, d: 40, h: 45, color: '#c49a6c', build: tvCabinet },
   tv:            { name: '電視 65吋', cat: '客廳', w: 145, d: 6, h: 84, color: '#1d1d1f', build: tv },
   rug:           { name: '地毯', cat: '客廳', w: 200, d: 140, h: 1, color: '#e9e2d6', build: rug },
@@ -395,7 +476,8 @@ export const CATALOG = {
   bed_queen:     { name: '雙人床 6尺', cat: '臥室', w: 182, d: 190, h: 100, color: '#c49a6c', color2: '#9a8471', build: bed },
   bed_double:    { name: '雙人床 5尺', cat: '臥室', w: 152, d: 188, h: 95, color: '#c49a6c', color2: '#b7a48f', build: bed },
   bed_single:    { name: '單人床', cat: '臥室', w: 105, d: 188, h: 90, color: '#c49a6c', color2: '#e3d6c3', build: bed },
-  wardrobe:      { name: '衣櫃', cat: '臥室', w: 180, d: 60, h: 215, color: '#c9a37a', build: o => cabinet(o, 50) },
+  wardrobe_open: { name: '開放式衣櫃', cat: '臥室', w: 180, d: 55, h: 215, color: '#b08d68', color2: '#ece7df', build: wardrobeOpen },
+  wardrobe:      { name: '衣櫃（有門）', cat: '臥室', w: 180, d: 60, h: 215, color: '#c9a37a', build: o => cabinet(o, 50) },
   nightstand:    { name: '床頭櫃', cat: '臥室', w: 45, d: 40, h: 50, color: '#c49a6c', build: o => drawers(o, 2) },
   dresser:       { name: '斗櫃', cat: '臥室', w: 100, d: 45, h: 85, color: '#c49a6c', build: o => drawers(o, 4) },
   dining_table:  { name: '餐桌', cat: '餐廚', w: 120, d: 60, h: 75, color: '#c49a6c', build: diningTable },
@@ -416,6 +498,7 @@ export const CATALOG = {
   bookshelf:     { name: '書櫃', cat: '收納', w: 80, d: 30, h: 180, color: '#c49a6c', build: bookshelf },
   desk:          { name: '書桌', cat: '書房・其他', w: 120, d: 60, h: 75, color: '#c49a6c', build: desk },
   office_chair:  { name: '辦公椅', cat: '書房・其他', w: 60, d: 60, h: 95, color: '#45474b', build: officeChair },
+  person:        { name: '人形（身高參考）', cat: '書房・其他', w: 50, d: 28, h: 170, color: '#9aa7b4', build: person },
   plant:         { name: '盆栽', cat: '書房・其他', w: 45, d: 45, h: 110, color: '#5f8a4e', build: plant },
 };
 

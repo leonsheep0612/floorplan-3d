@@ -42,16 +42,16 @@ export const OPENINGS = [
   { r: [800, 772, 815, 850], kind: 'door', head: 210, hinge: 1, swing: 1 },
 ];
 
-// 室內地坪（淨尺寸，用於材質與面積）
+// 室內地坪（淨尺寸，用於材質與面積）；eye = 人視角的觀看方位（度，0 = 從南側看）
 export const ROOMS = [
-  { id: 'living', name: '客餐廳', floor: 'wood', label: [690, 300],
+  { id: 'living', name: '客餐廳', floor: 'wood', label: [690, 300], eye: 25,
     poly: [[430, 181], [910, 181], [910, 515], [655, 515], [655, 772], [800, 772], [800, 903], [300, 903], [300, 728], [430, 728]] },
-  { id: 'master', name: '主臥', floor: 'wood', poly: [[925, 181], [1190, 181], [1190, 515], [925, 515]] },
-  { id: 'second', name: '次臥', floor: 'wood', poly: [[812, 530], [1025, 530], [1025, 757], [812, 757]] },
-  { id: 'bathA', name: '衛浴 A', floor: 'tile', poly: [[670, 530], [798, 530], [798, 757], [670, 757]] },
-  { id: 'bathB', name: '衛浴 B', floor: 'tile', poly: [[1040, 530], [1190, 530], [1190, 757], [1040, 757]] },
-  { id: 'balF', name: '前陽台', floor: 'tileLight', poly: [[510, 80], [729, 80], [729, 168], [510, 168]] },
-  { id: 'balR', name: '後陽台', floor: 'tileLight', poly: [[815, 772], [1020, 772], [1020, 903], [815, 903]] },
+  { id: 'master', name: '主臥', floor: 'wood', eye: -115, poly: [[925, 181], [1190, 181], [1190, 515], [925, 515]] },
+  { id: 'second', name: '次臥', floor: 'wood', eye: 15, poly: [[812, 530], [1025, 530], [1025, 757], [812, 757]] },
+  { id: 'bathA', name: '衛浴 A', floor: 'tile', eye: 160, poly: [[670, 530], [798, 530], [798, 757], [670, 757]] },
+  { id: 'bathB', name: '衛浴 B', floor: 'tile', eye: 200, poly: [[1040, 530], [1190, 530], [1190, 757], [1040, 757]] },
+  { id: 'balF', name: '前陽台', floor: 'tileLight', eye: 180, poly: [[510, 80], [729, 80], [729, 168], [510, 168]] },
+  { id: 'balR', name: '後陽台', floor: 'tileLight', eye: 0, poly: [[815, 772], [1020, 772], [1020, 903], [815, 903]] },
 ];
 
 // 不計面積的區域標示
@@ -72,9 +72,10 @@ export const DEFAULT_LAYOUT = [
   { t: 'rug', c: [655, 314], rot: 90, w: 220, d: 170 },
   { t: 'sofa', c: [742, 314], rot: -90 },
   { t: 'coffee_table', c: [632, 314], rot: 90 },
-  { t: 'tv_cabinet', c: [446, 320], rot: 90, w: 220, d: 36, color: '#bdbab4' },
-  { t: 'tv', c: [436, 320], rot: 90, elev: 55 },
+  { t: 'tv_floating', c: [448, 315], rot: 90 },
+  { t: 'tv', c: [436, 315], rot: 90, elev: 90 },
   { t: 'floor_lamp', c: [872, 222] },
+  { t: 'person', c: [600, 440] },
   { t: 'plant', c: [882, 478] },
   { t: 'cabinet_tall', c: [449, 605], rot: 90, w: 365, d: 45, name: '餐廳收納高櫃', color: '#b9b6b0' },
   { t: 'shoe_cabinet', c: [365, 746], w: 150, d: 40, h: 215, name: '玄關櫃' },
@@ -91,7 +92,7 @@ export const DEFAULT_LAYOUT = [
   { t: 'rug', c: [1020, 311], rot: 90, w: 200, d: 220, color: '#d9cdb8' },
   { t: 'bed_queen', c: [1006, 311], rot: 90 },
   { t: 'nightstand', c: [950, 210], rot: 90 },
-  { t: 'wardrobe', c: [1171, 348], rot: -90, w: 360, d: 44 },
+  { t: 'wardrobe_open', c: [1168, 348], rot: -90, w: 360, d: 50, name: '衣櫃' },
   { t: 'rug_round', c: [885, 650] },
   { t: 'bed_single', c: [970, 622] },
   { t: 'desk', c: [836, 640], rot: 90, w: 120, d: 50 },

@@ -27,6 +27,7 @@
   <div class="seg views" role="tablist" aria-label="視角">
     <button class="view-btn on" data-view="3d">3D</button>
     <button class="view-btn" data-view="top">平面</button>
+    <button class="view-btn" data-view="eye">人視角</button>
     <button class="view-btn" data-view="walk">漫遊</button>
   </div>
 
@@ -80,12 +81,14 @@
     </div>
     <label class="chk"><input id="tglLabels" type="checkbox" checked> 標示</label>
     <label class="chk"><input id="tglSnap" type="checkbox" checked> 吸附</label>
+    <label class="chk" title="擋住視線的牆自動降成矮牆"><input id="tglCut" type="checkbox" checked> 透視牆</label>
     <label class="chk"><input id="tglPlan" type="checkbox"> 原始平面圖</label>
   </div>
   <div id="coords" class="coords" hidden></div>
   <div class="hint only-desktop" id="hint">
     <span data-m="3d">左鍵旋轉 · 右鍵平移 · 滾輪縮放 · 拖曳家具移動 · R 旋轉</span>
     <span data-m="top">拖曳平移 · 滾輪縮放 · 拖曳家具移動 · R 旋轉</span>
+    <span data-m="eye">左鍵左右環視 · 滾輪前進後退 · 右鍵平移 · 點左側空間切換房間 · 擋住的牆會自動降低</span>
     <span data-m="walk">點畫面鎖定滑鼠 · WASD 移動 · Shift 加速 · Esc 釋放</span>
   </div>
   <div id="walkPad" class="walk-pad">
@@ -177,6 +180,7 @@
     <article data-g="start" class="on">
       <p class="lead">這是依照實際尺寸平面圖（1/40）建立的 3D 户型，可以在瀏覽器裡自由擺放家具。</p>
       <ol class="steps">
+        <li><b>看感覺</b>：切到上方的 <b>「人視角」</b>，用站著的高度看每個房間，判斷家具買多大。</li>
         <li><b>看整體</b>：滑鼠左鍵拖曳旋轉、右鍵拖曳平移、滾輪縮放。手機用單指旋轉、雙指縮放與平移。</li>
         <li><b>移動家具</b>：直接按住家具拖曳到想要的位置。</li>
         <li><b>新增家具</b>：從左側「家具庫」點一下或拖進畫面（手機點左上角 ☰ 打開）。</li>
@@ -187,13 +191,19 @@
     <article data-g="furn">
       <h4>新增</h4>
       <p>左側家具庫可依分類或搜尋找家具，點一下會放在畫面中央，或直接拖曳到想放的位置。</p>
+      <h4>尺寸參考</h4>
+      <p>畫面中的 <b>人形</b>（書房・其他分類）身高 170cm，可以拖到家具旁邊比對高度；改「高」就能換成家人的身高。</p>
+      <h4>衣櫃</h4>
+      <p>主臥預設是 <b>開放式衣櫃</b>（吊衣桿＋層板＋下方抽屜）；臥室分類裡也有「衣櫃（有門）」可替換。</p>
+      <h4>懸空與吊掛家具</h4>
+      <p><b>懸空電視櫃</b>（客廳分類）預設離地 25cm，灰色抽屜面板、中間是開放木格；<b>吊燈</b>（燈具分類）掛在天花板，電線會隨高度自動調整。兩者都用屬性面板的「離地」調高低，「顏色」改面板、「配色」改木作外框。</p>
       <h4>移動與對齊</h4>
       <p>按住拖曳即可移動，會自動吸附 5cm 格線並貼齊牆面。想自由擺放時，取消上方的「吸附」。用方向鍵可微調 5cm（加 Shift 為 1cm）。</p>
       <h4>屬性面板</h4>
       <ul>
         <li><b>名稱</b>：點標題可改名，例如「媽媽的書桌」。</li>
         <li><b>寬／深／高</b>：輸入實際尺寸（cm）。</li>
-        <li><b>離地</b>：例如電視放在櫃子上、吊櫃。</li>
+        <li><b>離地</b>：家具底部離地板的高度，例如懸空電視櫃、牆上的電視、吊燈。</li>
         <li><b>旋轉</b>：拖曳滑桿，或按 ⟲ ⟳ 轉 90°。</li>
         <li><b>顏色／配色</b>：主色與布料、床單等第二色；「預設」可還原。</li>
         <li><b>複製／刪除</b>：在面板下方。</li>
@@ -201,16 +211,18 @@
       <p class="tip">選取時地上的橘色箭頭代表家具「正面」朝向。</p>
     </article>
     <article data-g="view">
-      <h4>三種視角（上方切換）</h4>
+      <h4>四種視角（上方切換）</h4>
       <ul>
         <li><b>3D</b>：鳥瞰立體，適合看整體感覺。</li>
         <li><b>平面</b>：正上方俯視，最適合精準排位置。</li>
+        <li><b>人視角</b>：以站著的視線高度看房間，擋在前面的牆會自動降成矮牆、前方別間的家具會暫時隱藏，最適合確認家具大小與比例。左鍵左右環視、滾輪前進後退、右鍵平移；點左側「空間」可切到各房間的最佳角度。</li>
         <li><b>漫遊</b>：以 155cm 的視線高度在屋內走動。電腦點畫面後用 WASD 移動、滑鼠轉向（Shift 加速、Esc 釋放滑鼠）；手機拖曳畫面轉向、用右下方向鍵移動。</li>
       </ul>
       <h4>畫面選項（左上角）</h4>
       <ul>
         <li><b>全高牆／半牆／低牆</b>：牆擋住視線時切到半牆或低牆。</li>
         <li><b>標示</b>：顯示房間名稱與面積。</li>
+        <li><b>透視牆</b>：3D 時自動降低靠近鏡頭的外牆，人視角時連隔間牆一起降低；取消勾選可看完整牆面。</li>
         <li><b>原始平面圖</b>：把尺寸圖疊在地板上對照。</li>
       </ul>
       <p>左側「空間」清單點房間名稱可直接飛過去；右上 ⛶ 重設視角。</p>

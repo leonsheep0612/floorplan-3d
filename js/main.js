@@ -210,6 +210,70 @@ function buildWalls() {
       if (horiz) plain(len, 0.8, th, mx, 0, mz, sill); else plain(th, 0.8, len, mx, 0, mz, sill);
     }
   }
+  tagWalls();
+}
+
+// ── 牆面自動透視：擋在相機與視點之間的牆降成矮牆 ─────────────
+const outlinePolys = P.OUTLINE.map(polyCm);
+function inPoly(x, z, pts) {
+  let c = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const [xi, zi] = pts[i], [xj, zj] = pts[j];
+    if ((zi > z) !== (zj > z) && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) c = !c;
+  }
+  return c;
+}
+function tagWalls() {
+  const b = new THREE.Box3();
+  const out = (x, z) => !outlinePolys.some(p => inPoly(x, z, p));
+  for (const m of wallGroup.children) {
+    b.setFromObject(m);
+    const cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2, hx = (b.max.x - b.min.x) / 2, hz = (b.max.z - b.min.z) / 2;
+    const ext = out(cx - hx - 20, cz) || out(cx + hx + 20, cz) || out(cx, cz - hz - 20) || out(cx, cz + hz + 20);
+    m.userData.cut = { cx, cz, ext, half: Math.max(hx, hz), y0: b.min.y, h: b.max.y - b.min.y, py: m.position.y, state: false };
+  }
+}
+const STUB = 12;
+function setCut(m, cut) {
+  const u = m.userData.cut;
+  if (u.state === cut) return;
+  u.state = cut;
+  if (!cut) { m.visible = true; m.scale.y = 1; m.position.y = u.py; return; }
+  if (u.y0 >= STUB - 0.5) { m.visible = false; return; }
+  const nh = STUB - u.y0;
+  if (nh < u.h) { m.scale.y = nh / u.h; m.position.y = u.y0 + nh / 2; }
+}
+let cutOn = true;
+function updateCutaway() {
+  const active = cutOn && (mode === '3d' || mode === 'eye');
+  const cx = cam.position.x, cz = cam.position.z;
+  const vx = ctrl.target.x - cx, vz = ctrl.target.z - cz, dist = Math.hypot(vx, vz);
+  const tanH = Math.tan(deg(persp.fov / 2)) * persp.aspect;
+  for (const m of wallGroup.children) {
+    const u = m.userData.cut; if (!u) continue;
+    let cut = false;
+    // 鳥瞰只透視外牆；人視角連隔間牆一起透視
+    if (active && dist > 60 && (mode === 'eye' || u.ext)) {
+      const px = u.cx - cx, pz = u.cz - cz;
+      const t = (px * vx + pz * vz) / dist, perp = Math.abs(px * vz - pz * vx) / dist;
+      cut = t > 0 && t < dist - 40 && perp < t * tanH + u.half + 60;
+    }
+    setCut(m, cut);
+  }
+  // 人視角：擋在鏡頭前、離視點 2.5m 以外的家具暫時隱藏
+  const hideFurn = active && mode === 'eye' && dist > 60;
+  if (eyeRoom && !inPoly(ctrl.target.x, ctrl.target.z, eyeRoom._pts)) eyeRoom = null;
+  for (const [id, g] of objs) {
+    let hide = false;
+    if (hideFurn && id !== selId) {
+      const px = g.position.x - cx, pz = g.position.z - cz;
+      const t = (px * vx + pz * vz) / dist, perp = Math.abs(px * vz - pz * vx) / dist;
+      const inRoom = eyeRoom && inPoly(g.position.x, g.position.z, eyeRoom._pts);
+      hide = eyeRoom ? !inRoom && t < dist && perp < Math.max(t, 0) * tanH + 120
+                     : t < dist - 250 && perp < Math.max(t, 0) * tanH + 120;
+    }
+    g.visible = !hide;
+  }
 }
 
 function buildLabels() {
@@ -336,7 +400,7 @@ function commit(save = true) {
   updatePlanState();
 }
 function persist() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 2, items })); } catch { /* 私密模式等 */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 4, items })); } catch { /* 私密模式等 */ }
 }
 function restore(i) {
   hIndex = i;
@@ -421,7 +485,7 @@ function setRay(e) {
 }
 function pick(e) {
   setRay(e);
-  const hit = ray.intersectObjects(furnRoot.children, true).find(h => h.object.userData.fid);
+  const hit = ray.intersectObjects(furnRoot.children.filter(g => g.visible), true).find(h => h.object.userData.fid);
   return hit ? hit.object.userData.fid : null;
 }
 function floorPoint(e) {
@@ -586,14 +650,41 @@ function tweenTo(camPos, target, dur = 700, zoom) {
 function setMode(m) {
   if (m === mode) return;
   if (mode === 'walk') exitWalk();
+  if (mode === 'eye') exitEye();
   mode = m;
   $$('.view-btn').forEach(b => b.classList.toggle('on', b.dataset.view === m));
   document.body.dataset.mode = m;
-  ctrlP.enabled = m === '3d'; ctrlO.enabled = m === 'top';
-  if (m === '3d') { cam = persp; ctrl = ctrlP; }
+  ctrlP.enabled = m === '3d' || m === 'eye'; ctrlO.enabled = m === 'top';
+  if (m === '3d' || m === 'eye') { cam = persp; ctrl = ctrlP; }
   if (m === 'top') { cam = ortho; ctrl = ctrlO; }
-  if (m === 'walk') enterWalk();
   tween = null;
+  if (m === 'walk') enterWalk();
+  if (m === 'eye') enterEye();
+}
+
+// ── 人視角：視線高度環視，前方的牆自動透視 ────────────────
+const EYE_T = 100, EYE_POLAR = deg(82);
+let eyeSaved = null, eyeRoom = null;
+function eyePose(x, z, dist, theta) {
+  const t = new THREE.Vector3(x, EYE_T, z);
+  return [new THREE.Vector3().setFromSphericalCoords(dist, EYE_POLAR, theta).add(t), t];
+}
+function enterEye() {
+  eyeSaved = { p: persp.position.clone(), t: ctrlP.target.clone() };
+  ctrlP.minPolarAngle = ctrlP.maxPolarAngle = EYE_POLAR;
+  ctrlP.minDistance = 120; ctrlP.maxDistance = 1500;
+  persp.fov = 55; persp.updateProjectionMatrix();
+  eyeRoom = P.ROOMS[0];
+  const [p, t] = eyePose(P.cx(690), P.cz(330), 560, deg(eyeRoom.eye));
+  persp.position.copy(p); ctrlP.target.copy(t); ctrlP.update();
+  select(null);
+}
+function exitEye() {
+  ctrlP.minPolarAngle = 0; ctrlP.maxPolarAngle = deg(86);
+  ctrlP.minDistance = 80; ctrlP.maxDistance = 5000;
+  persp.fov = 40; persp.updateProjectionMatrix();
+  if (eyeSaved) { persp.position.copy(eyeSaved.p); ctrlP.target.copy(eyeSaved.t); }
+  ctrlP.update();
 }
 $$('.view-btn').forEach(b => b.onclick = () => setMode(b.dataset.view));
 
@@ -602,6 +693,16 @@ function flyToRoom(room) {
   const xs = room._pts.map(p => p[0]), zs = room._pts.map(p => p[1]);
   const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
   if (mode === 'walk') { walk.pos.set(x, EYE, z); return; }
+  if (mode === 'eye') {
+    const off = cam.position.clone().sub(ctrl.target);
+    const theta = room.eye != null ? deg(room.eye) : Math.atan2(off.x, off.z);
+    const [lx, lz] = room.label ? [P.cx(room.label[0]), P.cz(room.label[1])] : [x, z];
+    const [p, t] = eyePose(lx, lz, Math.min(1100, span * 0.75 + 240), theta);
+    eyeRoom = room;
+    tweenTo(p, t);
+    if (matchMedia('(max-width: 820px)').matches) document.body.classList.remove('lib-open');
+    return;
+  }
   if (mode === 'top') { const zoom = Math.min(4, (ortho.top * 1.6) / (span + 120)); tweenTo(new THREE.Vector3(x, 3000, z), new THREE.Vector3(x, 0, z), 600, zoom); return; }
   const dist = span * 1.5 + 250;
   tweenTo(new THREE.Vector3(x + dist * 0.15, dist * 0.95, z + dist * 0.7), new THREE.Vector3(x, 0, z));
@@ -610,6 +711,7 @@ function flyToRoom(room) {
 function resetView() {
   if (mode === 'top') tweenTo(new THREE.Vector3(CX, 3000, CZ), new THREE.Vector3(CX, 0, CZ), 600, 1);
   else if (mode === '3d') tweenTo(homePos(), new THREE.Vector3(CX, 0, CZ));
+  else if (mode === 'eye') { eyeRoom = P.ROOMS[0]; const [p, t] = eyePose(P.cx(690), P.cz(330), 560, deg(eyeRoom.eye)); tweenTo(p, t); }
 }
 $('#btnFit').onclick = resetView;
 
@@ -720,6 +822,7 @@ $$('.wall-btn').forEach(b => b.onclick = () => {
 $('#tglLabels').onchange = e => { labelGroup.visible = e.target.checked; labelRenderer.domElement.style.display = e.target.checked ? '' : 'none'; };
 $('#tglPlan').onchange = e => { overlay.visible = e.target.checked; };
 $('#tglSnap').onchange = e => { snapOn = e.target.checked; };
+$('#tglCut').onchange = e => { cutOn = e.target.checked; };
 $('#btnUndo').onclick = undo;
 $('#btnRedo').onclick = redo;
 $('#btnReset').onclick = () => {
@@ -1002,6 +1105,7 @@ function loop() {
     if (t >= 1) tween = null;
   }
   if (mode === 'walk') updateWalk(dt); else ctrl.update();
+  updateCutaway();
   renderer.render(scene, cam);
   labelRenderer.render(scene, cam);
   requestAnimationFrame(loop);
@@ -1017,6 +1121,27 @@ async function init() {
       list = s.items.map(sanitize).filter(Boolean);
       // v2 新增餐廳吊燈：舊存檔自動補上
       if ((s.v || 1) < 2 && !list.some(it => it.type === 'pendant')) list.push(...defaultLayout().filter(it => it.type === 'pendant'));
+      // v3 電視櫃改為懸空電視櫃：把原本的電視櫃換掉，電視移到櫃子上方
+      if ((s.v || 1) < 3 && !list.some(it => it.type === 'tv_floating')) {
+        const def = defaultLayout().find(it => it.type === 'tv_floating');
+        const old = list.find(it => it.type === 'tv_cabinet');
+        if (old) Object.assign(old, { type: 'tv_floating', w: def.w, d: def.d, h: def.h, elev: def.elev, color: def.color, color2: def.color2, name: def.name });
+        else list.push(def);
+        const top = (old || def).elev + def.h;
+        list.filter(it => it.type === 'tv' && it.elev < top).forEach(it => { it.elev = top + 25; });
+      }
+      // v4 衣櫃改為開放式，並加入人形身高參考
+      if ((s.v || 1) < 4) {
+        const dl = defaultLayout();
+        const wo = dl.find(it => it.type === 'wardrobe_open');
+        const old = list.find(it => it.type === 'wardrobe' && it.w >= 300);
+        if (old) {
+          // 加深後保持背板貼牆（rot 270 時背面朝 +X）
+          if (old.rot === 270) old.x = round1(old.x - (wo.d - old.d) / 2);
+          Object.assign(old, { type: 'wardrobe_open', d: wo.d, color: wo.color, color2: wo.color2, name: wo.name });
+        }
+        if (!list.some(it => it.type === 'person')) list.push(dl.find(it => it.type === 'person'));
+      }
     } } catch { /* 忽略 */ }
   }
   setItems(list || defaultLayout());
