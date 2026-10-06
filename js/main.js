@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import * as P from './plan.js?v=7';
-import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=7';
+import * as P from './plan.js?v=8';
+import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=8';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];

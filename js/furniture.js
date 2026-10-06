@@ -427,6 +427,40 @@ function roundChair({ w, d, h, color, color2 }, s = {}) {
   inner.position.y = seatY + (bh - 12) / 2 - 2; g.add(inner);
   return g;
 }
+// DYVLINGE：無扶手、拉扣蓬鬆坐墊與靠背、五爪鍍鉻旋轉腳
+function tuftedSwivel({ w, d, h, color, color2 }) {
+  const g = new THREE.Group(), fab = mat(color, { r: 0.97 }), dark = mat(shade(color, -0.18), { r: 0.97 });
+  const chrome = mat(color2, { r: 0.25, m: 0.55 });
+  // 五爪腳
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 + Math.PI / 5, L = Math.min(w, d) * 0.44;
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(3.2, 2.2, L), chrome);
+    spoke.position.set(Math.sin(a) * L / 2, 5, Math.cos(a) * L / 2);
+    spoke.rotation.y = a; spoke.castShadow = true; g.add(spoke);
+    C(g, 2.4, 2.4, 1.6, Math.sin(a) * L, 0, Math.cos(a) * L, mat('#2b2b2b', { r: 0.6 }), 12);
+  }
+  C(g, 3.2, 3.6, 4, 0, 4, 0, chrome, 16);
+  C(g, 2.2, 2.2, 16, 0, 8, 0, chrome, 16);
+  B(g, w * 0.55, 3, d * 0.45, 0, 22, 0, mat('#2b2b2b', { r: 0.6 }), 1);
+  // 坐墊（略往後傾的蓬鬆厚墊）
+  const seatTop = 43, seatT = 17, sd = Math.min(d - 8, 62);
+  const seat = B(g, w, seatT, sd, 0, seatTop - seatT, d / 2 - sd / 2 - 2, fab, 7.5);
+  seat.rotation.x = -0.05;
+  // 靠背（後傾、上緣圓潤）
+  const backH = h - seatTop + 14, backT = 16;
+  const back = B(g, w - 2, backH, backT, 0, 0, 0, fab, 7.5);
+  back.position.set(0, seatTop - 10 + backH / 2, -d / 2 + backT / 2 + 6);
+  back.rotation.x = -0.26;
+  // 拉扣
+  const btn = (x, y, z, parent) => { const s = new THREE.Mesh(new THREE.SphereGeometry(1.3, 10, 8), dark); s.position.set(x, y, z); parent.add(s); };
+  for (const bx of [-w * 0.18, w * 0.18]) for (const bz of [-sd * 0.15, sd * 0.2]) btn(bx, seatT / 2 + 0.2, bz, seat);
+  for (const bx of [-w * 0.18, w * 0.18]) for (const by of [-backH * 0.12, backH * 0.2]) btn(bx, by, backT / 2 + 0.2, back);
+  // 坐墊與靠背交接的軟墊縫
+  const roll = new THREE.Mesh(new THREE.CylinderGeometry(6.5, 6.5, w - 6, 24), fab);
+  roll.rotation.z = Math.PI / 2; roll.position.set(0, seatTop - 3, -d / 2 + 20); g.add(roll);
+  return g;
+}
+
 // 高背扶手椅（STRANDMON 類）：翼型椅背＋捲邊扶手＋木腳
 function wingChair({ w, d, h, color, color2 }) {
   const g = new THREE.Group(), fab = mat(color, { r: 0.95 }), cush = mat(shade(color, 0.07), { r: 0.95 }), leg = mat(color2, { r: 0.5 });
@@ -851,7 +885,7 @@ export const CATALOG = {
   armchair:          { name: 'STOCKHOLM 2025 扶手椅', cat: '單人椅', w: 76, d: 72, h: 68, color: '#cfcac2', color2: '#f2f2f0', build: o => roundChair(o, { seatH: 40, arc: 4.2 }) },
   armchair_strandmon:{ name: 'STRANDMON 高背扶手椅', cat: '單人椅', w: 82, d: 96, h: 101, color: '#5b6f8a', color2: '#5a3d28', build: wingChair },
   armchair_poang:    { name: 'POÄNG 扶手椅', cat: '單人椅', w: 68, d: 82, h: 100, color: '#8a9aa6', color2: '#d9b98a', build: bentChair },
-  armchair_dyvlinge: { name: 'DYVLINGE 旋轉休閒椅', cat: '單人椅', w: 63, d: 63, h: 78, color: '#e3dccd', color2: '#3a3a3a', build: o => roundChair(o, { swivel: true, seatH: 42, arc: 4.8 }) },
+  armchair_dyvlinge: { name: 'DYVLINGE 旋轉休閒椅', cat: '單人椅', w: 63, d: 75, h: 68, color: '#e0661f', color2: '#c9ccce', build: tuftedSwivel },
   armchair_lillesater:{ name: 'LILLESÄTER 旋轉休閒椅', cat: '單人椅', w: 70, d: 70, h: 75, color: '#2f3e5c', color2: '#2b2b2b', build: o => roundChair(o, { swivel: true, seatH: 42, arc: 5.0 }) },
   armchair_box:      { ...sofaDef('方正單人沙發', 85, 82, 80, '#cdbfa8', '#6b4f36', { arm: 16, armH: 62, legH: 10, seatH: 44, backD: 18, n: 1, round: 8 }), cat: '單人椅' },
   coffee_table:  { name: '茶几', cat: '客廳', w: 100, d: 50, h: 40, color: '#c49a6c', build: coffeeTable },
