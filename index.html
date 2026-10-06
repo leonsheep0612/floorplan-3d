@@ -6,7 +6,7 @@
 <title>無印風公寓 3D 擺設</title>
 <meta name="description" content="依平面圖建立的 3D 户型，可自由擺放、移動、旋轉家具。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='3' fill='%23f3f0ea' stroke='%2356575a' stroke-width='3'/%3E%3Cpath d='M16 3v14h13M3 19h8' stroke='%2356575a' stroke-width='3' fill='none'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=6">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -82,6 +82,7 @@
     <label class="chk"><input id="tglLabels" type="checkbox" checked> 標示</label>
     <label class="chk"><input id="tglSnap" type="checkbox" checked> 吸附</label>
     <label class="chk" title="擋住視線的牆自動降成矮牆"><input id="tglCut" type="checkbox" checked> 透視牆</label>
+    <label class="chk ceil-chk" title="人視角與漫遊時顯示天花板"><input id="tglCeil" type="checkbox" checked> 天花板</label>
     <label class="chk"><input id="tglPlan" type="checkbox"> 原始平面圖</label>
   </div>
   <div id="coords" class="coords" hidden></div>
@@ -108,6 +109,10 @@
     <button id="pClose" class="icon-btn" aria-label="關閉"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
   </div>
   <div class="props-body">
+    <div class="row" id="pStyleRow">
+      <span class="lbl">款式</span>
+      <select id="pStyle" aria-label="款式"></select>
+    </div>
     <div class="dims">
       <label>寬<input id="pW" type="number" min="5" max="1000" step="1"><i>cm</i></label>
       <label>深<input id="pD" type="number" min="1" max="1000" step="1"><i>cm</i></label>
@@ -191,10 +196,14 @@
     <article data-g="furn">
       <h4>新增</h4>
       <p>左側家具庫可依分類或搜尋找家具，點一下會放在畫面中央，或直接拖曳到想放的位置。</p>
+      <h4>沙發款式</h4>
+      <p>家具庫的 <b>「沙發」</b> 分類有布沙發（KIVIK、VIMLE、LILLESÄTER、MANNARP）與皮沙發（LANDSKRONA、STOCKHOLM、KLIPPAN、HEMLINGBY、VIMLE、KIVIK），寬深高依 IKEA 官網尺寸。點選沙發後，屬性面板的 <b>「款式」</b> 下拉選單可以直接換成別款，位置與方向不變。</p>
       <h4>尺寸參考</h4>
       <p>畫面中的 <b>人形</b>（書房・其他分類）身高 170cm，可以拖到家具旁邊比對高度；改「高」就能換成家人的身高。</p>
       <h4>衣櫃</h4>
-      <p>主臥預設是 <b>開放式衣櫃</b>（吊衣桿＋層板＋下方抽屜）；臥室分類裡也有「衣櫃（有門）」可替換。</p>
+      <p>主臥預設是 <b>IKEA BOAXEL 壁掛衣櫃</b>，寬 240cm（4 格各 60cm：長版吊掛、上下兩層吊掛、層板＋網籃、長版吊掛），深 40cm、高 201cm。臥室分類的「款式」可換成開放式衣櫃或有門衣櫃。</p>
+      <h4>天花板軌道燈</h4>
+      <p>客廳、餐廚和主臥的天花板預設有 <b>軌道燈</b>（燈具分類），可以拖曳移動、旋轉，改「寬」就是軌道長度，燈頭數量會自動增減。</p>
       <h4>懸空與吊掛家具</h4>
       <p><b>懸空電視櫃</b>（客廳分類）預設離地 25cm，灰色抽屜面板、中間是開放木格；<b>吊燈</b>（燈具分類）掛在天花板，電線會隨高度自動調整。兩者都用屬性面板的「離地」調高低，「顏色」改面板、「配色」改木作外框。</p>
       <h4>移動與對齊</h4>
@@ -222,6 +231,7 @@
       <ul>
         <li><b>全高牆／半牆／低牆</b>：牆擋住視線時切到半牆或低牆。</li>
         <li><b>標示</b>：顯示房間名稱與面積。</li>
+        <li><b>天花板</b>：人視角與漫遊時顯示天花板與軌道燈的樣子；從上方的 3D／平面看不到天花板。</li>
         <li><b>透視牆</b>：3D 時自動降低靠近鏡頭的外牆，人視角時連隔間牆一起降低；取消勾選可看完整牆面。</li>
         <li><b>原始平面圖</b>：把尺寸圖疊在地板上對照。</li>
       </ul>
@@ -298,6 +308,6 @@
 <div id="toast" class="toast" role="status"></div>
 <div class="loading" id="loading"><span></span>載入 3D 場景…</div>
 
-<script type="module" src="js/main.js"></script>
+<script type="module" src="js/main.js?v=6"></script>
 </body>
 </html>

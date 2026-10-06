@@ -65,6 +65,87 @@ function sofa({ w, d, h, color, color2 }) {
   return g;
 }
 
+// 可調款式的沙發（尺寸參考 IKEA 台灣官網）
+// s: arm 扶手寬、armH 扶手高、legH 腳高、seatH 座高、backD 椅背厚、n 座墊數、backCush 是否有背墊、leather、metalLeg、round
+function sofaStyled(o, s) {
+  const { w, d, h, color, color2 } = o;
+  const g = new THREE.Group();
+  const rr = s.leather ? 0.42 : 0.95;
+  const fab = mat(color, { r: rr }), cush = mat(shade(color, s.leather ? 0.05 : 0.08), { r: rr - 0.04 });
+  const leg = mat(color2, { r: 0.45, m: s.metalLeg ? 0.75 : 0 });
+  const legH = s.legH ?? 10, seatH = s.seatH ?? 44, round = s.round ?? 5;
+  const arm = Math.min(s.arm ?? 18, w * 0.15), armH = Math.min(s.armH ?? 62, h), backD = Math.min(s.backD ?? 20, d * 0.3);
+  const cushT = 13, baseH = Math.max(6, seatH - legH - cushT);
+  if (legH > 3) {
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      const l = C(g, s.metalLeg ? 1 : 2, s.metalLeg ? 1 : 1.4, legH, sx * (w / 2 - 6), 0, sz * (d / 2 - 6), leg, 10);
+      if (!s.metalLeg) l.rotation.z = sx * 0.08;
+    }
+  }
+  B(g, w, baseH, d, 0, legH, 0, fab, Math.min(round, 3));
+  B(g, w, h - legH, backD, 0, legH, -d / 2 + backD / 2, fab, round);
+  for (const sx of [-1, 1]) B(g, arm, armH - legH, d, sx * (w / 2 - arm / 2), legH, 0, fab, round);
+  const inner = w - 2 * arm;
+  const n = s.n ?? (inner > 150 ? 3 : inner > 95 ? 2 : 1), cw = inner / n;
+  for (let i = 0; i < n; i++) {
+    const x = -inner / 2 + cw * (i + 0.5);
+    B(g, cw - 1.2, cushT + 2, d - backD - 2, x, legH + baseH - 2, backD / 2 + 1, cush, Math.min(round, 5));
+    if (s.backCush !== false) {
+      const bc = B(g, cw - 3, Math.max(10, h - seatH - 2), 15, x, seatH - 1, -d / 2 + backD + 6, cush, 6);
+      bc.rotation.x = -0.12;
+    }
+  }
+  return g;
+}
+const sofaDef = (name, w, d, h, color, color2, s) => ({ name, cat: '沙發', w, d, h, color, color2, build: o => sofaStyled(o, s) });
+
+// IKEA BOAXEL 壁掛式開放衣櫃：壁條＋支撐架＋層板／吊衣桿／網眼網籃，每格約 60cm
+function boaxel({ w, d, h, color }) {
+  const g = new THREE.Group();
+  const metal = mat(color, { r: 0.4, m: 0.3 });
+  const wire = mat(color, { r: 0.4, m: 0.3, o: 0.55 });
+  const n = Math.max(1, Math.round(w / 60)), bw = w / n;
+  const clothes = ['#e9e4da', '#c9b8a3', '#7d8a96', '#3f4650', '#b9a089', '#f4f1ea', '#8c6d5a', '#a7b2a0', '#d8c8b2'];
+  let k = 11;
+  const pick = () => { k = (k * 7 + 3) % 97; return k; };
+  // 頂部安裝桿與壁條
+  B(g, w, 3, 1.5, 0, h - 3, -d / 2 + 0.75, metal, 0, false);
+  for (let i = 0; i <= n; i++) B(g, 2.5, h - 8, 1.2, -w / 2 + bw * i + (i === 0 ? 1.25 : i === n ? -1.25 : 0), 5, -d / 2 + 0.6, metal, 0, false);
+  const brackets = y => { for (let i = 0; i <= n; i++) B(g, 1.2, 3, d - 2, -w / 2 + bw * i + (i === 0 ? 1 : i === n ? -1 : 0), y - 3, 0, metal, 0, false); };
+  const shelf = (x, y, wid) => B(g, wid, 1.8, d - 1, x, y, 0.5, metal, 0.3);
+  const rail = (x, y, wid) => { const r = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, wid, 10), metal); r.rotation.z = Math.PI / 2; r.position.set(x, y, 2); g.add(r); };
+  const hang = (x0, wid, top, len) => {
+    const cnt = Math.max(2, Math.floor((wid - 6) / 4.5));
+    for (let c = 0; c < cnt; c++) {
+      const l = len - (pick() % 4) * 7, x = x0 + 3 + c * ((wid - 6) / (cnt - 1));
+      B(g, 1.6, l, d * 0.8, x, top - l - 2, 2, mat(clothes[pick() % clothes.length], { r: 1 }), 0.6);
+    }
+  };
+  const basket = (x, y, wid, bh) => {
+    B(g, wid - 2, bh, d - 4, x, y, 1, wire, 0.5, false);
+    B(g, wid - 6, bh * 0.6, d - 10, x, y + 1, 1, mat(clothes[pick() % clothes.length], { r: 1 }), 1);
+  };
+  const folded = (x, y, wid) => { const c = mat(clothes[pick() % clothes.length], { r: 1 }); B(g, Math.min(30, wid * 0.55), 6 + (k % 5), d * 0.65, x, y + 1.8, 2, c, 1.5); };
+  const topY = h - 8;
+  brackets(topY);
+  for (let i = 0; i < n; i++) {
+    const x0 = -w / 2 + bw * i + 1.5, wid = bw - 3, cx = x0 + wid / 2;
+    shelf(cx, topY, wid); folded(cx, topY, wid);
+    const kind = n === 1 ? 0 : [0, 1, 2, 0][i % 4];
+    if (kind === 0) {           // 長版吊掛
+      rail(cx, topY - 6, wid); hang(x0, wid, topY - 6, 118);
+    } else if (kind === 1) {    // 上下兩層吊掛
+      rail(cx, topY - 6, wid); hang(x0, wid, topY - 6, 72);
+      rail(cx, 98, wid); hang(x0, wid, 98, 66);
+    } else {                    // 層板＋網籃
+      for (const y of [150, 120]) { shelf(cx, y, wid); folded(cx, y, wid); }
+      for (const y of [15, 45, 75]) basket(cx, y, wid, 24);
+    }
+  }
+  brackets(150); brackets(120);
+  return g;
+}
+
 function coffeeTable({ w, d, h, color }) {
   const g = new THREE.Group(), wood = mat(color, { r: 0.55 });
   const top = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 4, 48), wood);
@@ -260,6 +341,28 @@ function wardrobeOpen({ w, d, h, color, color2 }) {
       B(g, 1.6, len, d * 0.82, x, ry - len - 2, 0, mat(clothes[k % clothes.length], { r: 1 }), 0.6);
     }
   }
+  return g;
+}
+
+// 天花板軌道燈：吸頂軌道＋可調角度投射燈頭（elev 預設貼齊天花板）
+function trackLight({ w, d, h, color }) {
+  const g = new THREE.Group(), body = mat(color, { r: 0.45 }), lens = mat('#fff3dc', { r: 0.4, e: '#ffe2b0', ei: 1.4 });
+  B(g, w, 3, Math.max(3.5, d * 0.6), 0, h - 3, 0, body, 0.5, false);
+  const n = Math.max(1, Math.round(w / 60));
+  for (let i = 0; i < n; i++) {
+    const x = -w / 2 + (w / n) * (i + 0.5), side = i % 2 ? 1 : -1;
+    C(g, 0.8, 0.8, 4, x, h - 7, 0, body, 8).castShadow = false;
+    const head = new THREE.Group();
+    head.position.set(x, h - 8, 0);
+    head.rotation.x = side * 0.55;
+    const can = new THREE.Mesh(new THREE.CylinderGeometry(3.6, 3.6, 10, 18), body);
+    can.position.y = -4; head.add(can);
+    const lz = new THREE.Mesh(new THREE.CircleGeometry(3.1, 18), lens);
+    lz.rotation.x = Math.PI / 2; lz.position.y = -9.1; head.add(lz);
+    g.add(head);
+  }
+  const light = new THREE.PointLight('#ffe4bf', 0.3, Math.max(300, w * 1.4), 0);
+  light.position.y = -20; g.add(light);
   return g;
 }
 
@@ -459,11 +562,23 @@ function pendant({ w, d, h, color, elev }) {
 
 // ── 目錄 ────────────────────────────────────────────────
 export const CEIL_H = 278;
-export const CATEGORIES = ['客廳', '臥室', '餐廚', '衛浴', '收納', '燈具', '書房・其他'];
+export const CATEGORIES = ['沙發', '客廳', '臥室', '餐廚', '衛浴', '收納', '燈具', '書房・其他'];
 
 export const CATALOG = {
-  sofa:          { name: '三人沙發', cat: '客廳', w: 240, d: 85, h: 80, color: '#e6ddcd', color2: '#6b4f36', build: sofa },
-  armchair:      { name: '單人沙發', cat: '客廳', w: 85, d: 82, h: 80, color: '#cdbfa8', color2: '#6b4f36', build: sofa },
+  sofa:          { name: '三人沙發（通用）', cat: '沙發', w: 240, d: 85, h: 80, color: '#e6ddcd', color2: '#6b4f36', build: sofa },
+  // 布沙發
+  sofa_kivik:      sofaDef('布 KIVIK 三人座', 228, 95, 83, '#c9c1b2', '#3a3a3a', { arm: 24, armH: 64, legH: 3, seatH: 45, backD: 22, n: 3, round: 8 }),
+  sofa_vimle:      sofaDef('布 VIMLE 三人座', 241, 98, 83, '#b9a58e', '#3a3a3a', { arm: 15, armH: 68, legH: 6, seatH: 48, backD: 20, n: 3, round: 6 }),
+  sofa_lillesater: sofaDef('布 LILLESÄTER 三人座', 201, 90, 69, '#b8b468', '#3a3a3a', { arm: 8, armH: 60, legH: 2, seatH: 44, backD: 14, n: 1, backCush: false, round: 6 }),
+  sofa_mannarp:    sofaDef('布 MANNARP 三人座', 198, 95, 90, '#ddd2bf', '#6e4b2e', { arm: 10, armH: 62, legH: 16, seatH: 45, backD: 14, n: 3, round: 5 }),
+  // 皮沙發
+  sofa_landskrona: sofaDef('皮 LANDSKRONA 三人座', 204, 89, 78, '#9b6a3c', '#6e4b2e', { arm: 12, armH: 64, legH: 16, seatH: 44, backD: 16, n: 3, leather: true, round: 4 }),
+  sofa_stockholm:  sofaDef('皮 STOCKHOLM 三人座', 211, 88, 80, '#c99a66', '#5a3d28', { arm: 15, armH: 72, legH: 14, seatH: 43, backD: 16, n: 3, leather: true, round: 5 }),
+  sofa_klippan:    sofaDef('皮 KLIPPAN 雙人座', 177, 88, 66, '#2a2a2a', '#2a2a2a', { arm: 20, armH: 66, legH: 3, seatH: 43, backD: 22, n: 1, backCush: false, leather: true, round: 7 }),
+  sofa_hemlingby:  sofaDef('皮 HEMLINGBY 雙人座', 145, 72, 72, '#2a2a2a', '#333333', { arm: 8, armH: 61, legH: 14.5, seatH: 42, backD: 12, n: 2, backCush: false, leather: true, metalLeg: true, round: 3 }),
+  sofa_vimle_l:    sofaDef('皮 VIMLE 三人座', 241, 98, 80, '#2b2b2b', '#2b2b2b', { arm: 15, armH: 65, legH: 4, seatH: 45, backD: 20, n: 3, leather: true, round: 6 }),
+  sofa_kivik_l:    sofaDef('皮 KIVIK 三人座', 227, 95, 83, '#2d2d2d', '#2b2b2b', { arm: 24, armH: 64, legH: 3, seatH: 45, backD: 22, n: 3, leather: true, round: 8 }),
+  armchair:      { name: '單人沙發', cat: '沙發', w: 85, d: 82, h: 80, color: '#cdbfa8', color2: '#6b4f36', build: sofa },
   coffee_table:  { name: '茶几', cat: '客廳', w: 100, d: 50, h: 40, color: '#c49a6c', build: coffeeTable },
   side_table:    { name: '邊几', cat: '客廳', w: 45, d: 45, h: 50, color: '#c49a6c', build: sideTable },
   tv_floating:   { name: '懸空電視櫃', cat: '客廳', w: 280, d: 40, h: 40, elev: 25, color: '#bdbab4', color2: '#a8835e', build: tvFloating },
@@ -472,10 +587,12 @@ export const CATALOG = {
   rug:           { name: '地毯', cat: '客廳', w: 200, d: 140, h: 1, color: '#e9e2d6', build: rug },
   rug_round:     { name: '圓地毯', cat: '客廳', w: 120, d: 120, h: 1, color: '#c8b59a', build: rugRound },
   pendant:       { name: '吊燈', cat: '燈具', w: 50, d: 50, h: 15, elev: 150, color: '#e8692a', build: pendant },
+  track_light:   { name: '軌道燈', cat: '燈具', w: 240, d: 6, h: 14, elev: CEIL_H - 14, color: '#f5f5f3', build: trackLight },
   floor_lamp:    { name: '立燈', cat: '燈具', w: 40, d: 40, h: 160, color: '#f3ead8', build: floorLamp },
   bed_queen:     { name: '雙人床 6尺', cat: '臥室', w: 182, d: 190, h: 100, color: '#c49a6c', color2: '#9a8471', build: bed },
   bed_double:    { name: '雙人床 5尺', cat: '臥室', w: 152, d: 188, h: 95, color: '#c49a6c', color2: '#b7a48f', build: bed },
   bed_single:    { name: '單人床', cat: '臥室', w: 105, d: 188, h: 90, color: '#c49a6c', color2: '#e3d6c3', build: bed },
+  boaxel:        { name: 'IKEA BOAXEL 壁掛衣櫃', cat: '臥室', w: 240, d: 40, h: 201, color: '#f1f1ef', build: boaxel },
   wardrobe_open: { name: '開放式衣櫃', cat: '臥室', w: 180, d: 55, h: 215, color: '#b08d68', color2: '#ece7df', build: wardrobeOpen },
   wardrobe:      { name: '衣櫃（有門）', cat: '臥室', w: 180, d: 60, h: 215, color: '#c9a37a', build: o => cabinet(o, 50) },
   nightstand:    { name: '床頭櫃', cat: '臥室', w: 45, d: 40, h: 50, color: '#c49a6c', build: o => drawers(o, 2) },

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import * as P from './plan.js';
-import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js';
+import * as P from './plan.js?v=6';
+import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=6';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -146,6 +146,8 @@ function polyMesh(pts, material, y) {
 }
 
 const planGroup = new THREE.Group(); scene.add(planGroup);
+const ceilingGroup = new THREE.Group(); scene.add(ceilingGroup);
+let ceilOn = true;
 const wallGroup = new THREE.Group(); scene.add(wallGroup);
 const labelGroup = new THREE.Group(); scene.add(labelGroup);
 const colliders = []; // 漫遊碰撞用
@@ -163,6 +165,18 @@ function plain(w, h, d, x, y, z, material) {
   m.position.set(x, y + h / 2, z); m.castShadow = true; m.receiveShadow = true;
   wallGroup.add(m); return m;
 }
+
+// 天花板：只從下方看得到（BackSide），人視角與漫遊時顯示
+function buildCeiling() {
+  const m = new THREE.MeshStandardMaterial({ color: '#f3eee5', emissive: '#f3eee5', emissiveIntensity: 0.45, roughness: 0.95, side: THREE.BackSide });
+  for (const room of P.ROOMS) {
+    if (room.id.startsWith('bal')) continue;
+    const c = polyMesh(polyCm(room.poly), m, P.CEIL);
+    c.receiveShadow = false;
+    ceilingGroup.add(c);
+  }
+}
+buildCeiling();
 
 function buildFloors() {
   for (const o of P.OUTLINE) planGroup.add(polyMesh(polyCm(o), new THREE.MeshStandardMaterial({ color: '#d8d4cc', roughness: 0.8 }), 0));
@@ -260,6 +274,7 @@ function updateCutaway() {
     }
     setCut(m, cut);
   }
+  ceilingGroup.visible = ceilOn && (mode === 'eye' || mode === 'walk') && wallHeight >= P.CEIL;
   // 人視角：擋在鏡頭前、離視點 2.5m 以外的家具暫時隱藏
   const hideFurn = active && mode === 'eye' && dist > 60;
   if (eyeRoom && !inPoly(ctrl.target.x, ctrl.target.z, eyeRoom._pts)) eyeRoom = null;
@@ -400,7 +415,7 @@ function commit(save = true) {
   updatePlanState();
 }
 function persist() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 4, items })); } catch { /* 私密模式等 */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 5, items })); } catch { /* 私密模式等 */ }
 }
 function restore(i) {
   hIndex = i;
@@ -429,6 +444,11 @@ function select(id) {
   $('#pRot').value = Math.round(it.rot); $('#pRotVal').textContent = Math.round(it.rot) + '°';
   $('#pColor').value = it.color || def.color;
   $('#pColor2Row').hidden = !def.color2;
+  const same = Object.entries(CATALOG).filter(([, d]) => d.cat === def.cat);
+  const sel = $('#pStyle');
+  sel.innerHTML = same.map(([k, d]) => `<option value="${k}">${d.name}　${d.w}×${d.d}</option>`).join('');
+  sel.value = it.type;
+  $('#pStyleRow').hidden = same.length < 2;
   if (def.color2) $('#pColor2').value = it.color2 || def.color2;
 }
 const selItem = () => items.find(i => i.id === selId);
@@ -441,6 +461,16 @@ function updateSel(fn, rebuild = false) {
 }
 const normRot = r => ((Math.round(r) % 360) + 360) % 360;
 
+$('#pStyle').addEventListener('change', e => {
+  const t = e.target.value, def = CATALOG[t];
+  if (!def) return;
+  updateSel(it => {
+    const keepName = it.name && it.name !== CATALOG[it.type].name;
+    Object.assign(it, { type: t, w: def.w, d: def.d, h: def.h, color: def.color, color2: def.color2 || null, elev: def.elev ?? it.elev ?? 0 });
+    if (!keepName) it.name = def.name;
+  }, true);
+  select(selId); commit();
+});
 $('#pName').addEventListener('change', e => { updateSel(it => it.name = e.target.value.trim() || CATALOG[it.type].name); commit(); });
 for (const [id, key, min] of [['#pW', 'w', 5], ['#pD', 'd', 1], ['#pH', 'h', 1]]) {
   $(id).addEventListener('change', e => {
@@ -823,6 +853,7 @@ $('#tglLabels').onchange = e => { labelGroup.visible = e.target.checked; labelRe
 $('#tglPlan').onchange = e => { overlay.visible = e.target.checked; };
 $('#tglSnap').onchange = e => { snapOn = e.target.checked; };
 $('#tglCut').onchange = e => { cutOn = e.target.checked; };
+$('#tglCeil').onchange = e => { ceilOn = e.target.checked; };
 $('#btnUndo').onclick = undo;
 $('#btnRedo').onclick = redo;
 $('#btnReset').onclick = () => {
@@ -1129,6 +1160,13 @@ async function init() {
         else list.push(def);
         const top = (old || def).elev + def.h;
         list.filter(it => it.type === 'tv' && it.elev < top).forEach(it => { it.elev = top + 25; });
+      }
+      // v5 主臥衣櫃改為 IKEA BOAXEL 240cm，加入天花板軌道燈
+      if ((s.v || 1) < 5) {
+        const dl = defaultLayout();
+        const old = list.find(it => (it.type === 'wardrobe_open' || it.type === 'wardrobe') && it.w >= 300);
+        if (old) list[list.indexOf(old)] = dl.find(it => it.type === 'boaxel');
+        if (!list.some(it => it.type === 'track_light')) list.push(...dl.filter(it => it.type === 'track_light'));
       }
       // v4 衣櫃改為開放式，並加入人形身高參考
       if ((s.v || 1) < 4) {
