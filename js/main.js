@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import * as P from './plan.js?v=8';
-import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=8';
+import * as P from './plan.js?v=9';
+import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=9';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -152,12 +152,16 @@ const wallGroup = new THREE.Group(); scene.add(wallGroup);
 const labelGroup = new THREE.Group(); scene.add(labelGroup);
 const colliders = []; // 漫遊碰撞用
 let wallHeight = P.CEIL;
+const FINISHES = { matte: '平光乳膠漆', lime: '礦物石灰漆', micro: '微水泥', concrete: '清水模漆', pearl: '珠光藝術漆' };
+let paints = [];
+try { paints = sanitizePaints(JSON.parse(localStorage.getItem('fp3d.walls') || '[]')); } catch { /* 忽略 */ }
 
 function wallBox(r, y0, y1, mats = WALL_MATS) {
   if (y1 - y0 < 0.5) return;
   const m = new THREE.Mesh(new THREE.BoxGeometry(r.x2 - r.x1, y1 - y0, r.z2 - r.z1), mats);
   m.position.set((r.x1 + r.x2) / 2, (y0 + y1) / 2, (r.z1 + r.z2) / 2);
   m.castShadow = m.receiveShadow = true;
+  m.userData.wall = true;
   wallGroup.add(m);
 }
 function plain(w, h, d, x, y, z, material) {
@@ -184,10 +188,28 @@ function buildFloors() {
 }
 
 function buildWalls() {
+  wallGroup.children.forEach(m => m.geometry.dispose());
   wallGroup.clear();
   colliders.length = 0;
   const H = wallHeight;
-  for (const w of P.WALLS) { const r = rectCm(w); wallBox(r, 0, H); colliders.push(r); }
+  // 牆段在垂直相接的牆處切開，讓每個房間的牆面可以分開上漆
+  const rects = P.WALLS.map(rectCm);
+  for (const r of rects) {
+    colliders.push(r);
+    const horiz = r.x2 - r.x1 >= r.z2 - r.z1;
+    const lo = horiz ? r.x1 : r.z1, hi = horiz ? r.x2 : r.z2;
+    const cuts = new Set();
+    for (const o of rects) {
+      if (o === r) continue;
+      const touch = horiz ? Math.abs(o.z2 - r.z1) < 1 || Math.abs(o.z1 - r.z2) < 1 : Math.abs(o.x2 - r.x1) < 1 || Math.abs(o.x1 - r.x2) < 1;
+      if (!touch) continue;
+      for (const v of horiz ? [o.x1, o.x2] : [o.z1, o.z2]) if (v > lo + 2 && v < hi - 2) cuts.add(v);
+    }
+    const pts = [lo, ...[...cuts].sort((a, b) => a - b), hi];
+    for (let i = 0; i < pts.length - 1; i++) {
+      wallBox(horiz ? { ...r, x1: pts[i], x2: pts[i + 1] } : { ...r, z1: pts[i], z2: pts[i + 1] }, 0, H);
+    }
+  }
   for (const w of P.PARAPETS) {
     const r = rectCm(w); colliders.push(r);
     wallBox(r, 0, Math.min(P.PARAPET_H, H));
@@ -225,7 +247,124 @@ function buildWalls() {
     }
   }
   tagWalls();
+  applyPaints();
 }
+
+// ── 牆面油漆：選顏色與漆種後點牆面套用，依「同一平面、相連的牆段」整面刷 ──
+const WALLS_KEY = 'fp3d.walls';
+const finishCanvases = {};
+function finishCanvas(kind) {
+  if (finishCanvases[kind]) return finishCanvases[kind];
+  const n = 512, c = document.createElement('canvas'); c.width = c.height = n;
+  const g = c.getContext('2d'), r = rnd(kind.length * 97 + 13);
+  g.fillStyle = '#f0f0f0'; g.fillRect(0, 0, n, n);
+  const blob = (count, rMin, rMax, aMax, light) => {
+    for (let i = 0; i < count; i++) {
+      const x = r() * n, y = r() * n, rad = rMin + r() * (rMax - rMin), a = r() * aMax;
+      for (const [ox, oy] of [[0, 0], [n, 0], [-n, 0], [0, n], [0, -n]]) {
+        const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, rad);
+        gr.addColorStop(0, light ? `rgba(255,255,255,${a})` : `rgba(90,90,90,${a})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = gr; g.fillRect(x + ox - rad, y + oy - rad, rad * 2, rad * 2);
+      }
+    }
+  };
+  if (kind === 'lime') { blob(60, 40, 160, 0.16, false); blob(50, 30, 140, 0.35, true); }
+  if (kind === 'micro') {
+    blob(40, 30, 120, 0.12, false); blob(30, 30, 120, 0.3, true);
+    for (let i = 0; i < 9000; i++) { g.fillStyle = `rgba(80,80,80,${r() * 0.12})`; g.fillRect(r() * n, r() * n, 1.4, 1.4); }
+  }
+  if (kind === 'concrete') {
+    blob(70, 20, 110, 0.14, false); blob(40, 20, 110, 0.25, true);
+    for (let i = 0; i < 6000; i++) { g.fillStyle = `rgba(60,60,60,${r() * 0.15})`; g.fillRect(r() * n, r() * n, 1.6, 1.6); }
+    g.strokeStyle = 'rgba(80,80,80,0.28)'; g.lineWidth = 2; g.strokeRect(1, 1, n - 2, n - 2);
+    for (const fx of [0.25, 0.75]) for (const fy of [0.25, 0.75]) {
+      g.fillStyle = 'rgba(70,70,70,0.4)'; g.beginPath(); g.arc(fx * n, fy * n, 7, 0, Math.PI * 2); g.fill();
+    }
+  }
+  return (finishCanvases[kind] = c);
+}
+const paintMatCache = new Map();
+function paintMaterial(color, finish, fw, fh) {
+  const key = [color, finish, Math.round(fw / 10), Math.round(fh / 10)].join('|');
+  if (paintMatCache.has(key)) return paintMatCache.get(key);
+  let map = null;
+  if (finish === 'lime' || finish === 'micro' || finish === 'concrete') {
+    map = new THREE.CanvasTexture(finishCanvas(finish));
+    map.wrapS = map.wrapT = THREE.RepeatWrapping; map.colorSpace = THREE.SRGBColorSpace;
+    const tile = finish === 'concrete' ? 120 : 180;
+    map.repeat.set(Math.max(0.2, fw / tile), Math.max(0.2, fh / tile));
+    map.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  }
+  const m = new THREE.MeshStandardMaterial({
+    color, map, roughness: { matte: 0.95, lime: 0.97, micro: 0.75, concrete: 0.9, pearl: 0.35 }[finish] ?? 0.95,
+    metalness: finish === 'pearl' ? 0.18 : 0,
+  });
+  paintMatCache.set(key, m);
+  return m;
+}
+// 牆段四個側面：materialIndex 0:+x 1:-x 4:+z 5:-z
+function wallFaces(m) {
+  const u = m.userData.cut;
+  return [
+    { idx: 0, axis: 'x', dir: 1, c: u.cx + u.hx, a1: u.cz - u.hz, a2: u.cz + u.hz, fw: u.hz * 2 },
+    { idx: 1, axis: 'x', dir: -1, c: u.cx - u.hx, a1: u.cz - u.hz, a2: u.cz + u.hz, fw: u.hz * 2 },
+    { idx: 4, axis: 'z', dir: 1, c: u.cz + u.hz, a1: u.cx - u.hx, a2: u.cx + u.hx, fw: u.hx * 2 },
+    { idx: 5, axis: 'z', dir: -1, c: u.cz - u.hz, a1: u.cx - u.hx, a2: u.cx + u.hx, fw: u.hx * 2 },
+  ];
+}
+const samePlane = (f, p) => f.axis === p.axis && f.dir === p.dir && Math.abs(f.c - p.c) < 0.6;
+function applyPaints() {
+  for (const m of wallGroup.children) {
+    if (!m.userData.wall) continue;
+    for (const f of wallFaces(m)) {
+      const p = paints.find(p => samePlane(f, p) && Math.min(f.a2, p.a2) - Math.max(f.a1, p.a1) > 0.5);
+      if (!p) continue;
+      if (m.material === WALL_MATS) m.material = WALL_MATS.slice();
+      m.material[f.idx] = paintMaterial(p.color, p.finish, f.fw, m.userData.cut.h);
+    }
+  }
+}
+function savePaints() { try { localStorage.setItem(WALLS_KEY, JSON.stringify(paints)); } catch { /* 忽略 */ } }
+function sanitizePaints(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(p => p && (p.axis === 'x' || p.axis === 'z') && [1, -1].includes(p.dir) && /^#[0-9a-f]{6}$/i.test(p.color) && FINISHES[p.finish])
+    .map(p => ({ axis: p.axis, dir: p.dir, c: +p.c, a1: +p.a1, a2: +p.a2, color: p.color, finish: p.finish }));
+}
+let paintMode = false;
+const brush = { color: '#d9d4cb', finish: 'matte' };
+function paintAt(e) {
+  setRay(e);
+  // 已被透視降低的牆不算（避免點到看不見的牆）
+  const meshes = wallGroup.children.filter(m => m.userData.wall && m.visible && !m.userData.cut.state);
+  const hit = ray.intersectObjects(meshes, false)[0];
+  if (!hit) return false;
+  const f = wallFaces(hit.object).find(f => f.idx === hit.face.materialIndex);
+  if (!f) return false; // 牆頂／底面不刷
+  // 往兩側延伸到同一平面、相連的牆段（例如窗台下、窗楣上方的牆）
+  let a1 = f.a1, a2 = f.a2, grew = true;
+  const all = meshes.flatMap(wallFaces).filter(g => samePlane(g, f));
+  while (grew) {
+    grew = false;
+    for (const g of all) if (g.a2 >= a1 - 1.5 && g.a1 <= a2 + 1.5 && (g.a1 < a1 - 0.01 || g.a2 > a2 + 0.01)) { a1 = Math.min(a1, g.a1); a2 = Math.max(a2, g.a2); grew = true; }
+  }
+  // 遇到垂直相接的隔間牆就停：只刷點擊所在房間的那一段
+  const t0 = f.axis === 'x' ? hit.point.z : hit.point.x;
+  for (const m of wallGroup.children) {
+    if (!m.userData.wall) continue;
+    const u = m.userData.cut;
+    const near = f.axis === 'x' ? (f.dir > 0 ? u.cx - u.hx : u.cx + u.hx) : (f.dir > 0 ? u.cz - u.hz : u.cz + u.hz);
+    if (Math.abs(near - f.c) > 1) continue;
+    const b1 = f.axis === 'x' ? u.cz - u.hz : u.cx - u.hx, b2 = f.axis === 'x' ? u.cz + u.hz : u.cx + u.hx;
+    if (b2 <= t0 && b2 > a1) a1 = b2;
+    if (b1 >= t0 && b1 < a2) a2 = b1;
+  }
+  paints = paints.filter(p => !(samePlane(f, p) && Math.min(a2, p.a2) - Math.max(a1, p.a1) > 0.5));
+  if (!brush.erase) paints.push({ axis: f.axis, dir: f.dir, c: round1(f.c), a1: round1(a1), a2: round1(a2), color: brush.color, finish: brush.finish });
+  savePaints(); buildWalls(); updateCutaway();
+  toast(brush.erase ? '已還原這面牆' : `已刷上 ${FINISHES[brush.finish]}`);
+  return true;
+}
+
 
 // ── 牆面自動透視：擋在相機與視點之間的牆降成矮牆 ─────────────
 const outlinePolys = P.OUTLINE.map(polyCm);
@@ -244,7 +383,7 @@ function tagWalls() {
     b.setFromObject(m);
     const cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2, hx = (b.max.x - b.min.x) / 2, hz = (b.max.z - b.min.z) / 2;
     const ext = out(cx - hx - 20, cz) || out(cx + hx + 20, cz) || out(cx, cz - hz - 20) || out(cx, cz + hz + 20);
-    m.userData.cut = { cx, cz, ext, half: Math.max(hx, hz), y0: b.min.y, h: b.max.y - b.min.y, py: m.position.y, state: false };
+    m.userData.cut = { cx, cz, hx, hz, ext, half: Math.max(hx, hz), y0: b.min.y, h: b.max.y - b.min.y, py: m.position.y, state: false };
   }
 }
 const STUB = 12;
@@ -571,6 +710,7 @@ const clampZ = v => Math.max(BZ0 - 200, Math.min(BZ1 + 200, v));
 
 let drag = null, down = null;
 viewport.addEventListener('pointerdown', e => {
+  if (paintMode && e.target === renderer.domElement && e.button === 0) { if (paintAt(e)) e.stopPropagation(); return; }
   if (mode === 'walk' || e.target !== renderer.domElement) return;
   down = { x: e.clientX, y: e.clientY };
   if (e.button !== 0) return;
@@ -780,7 +920,7 @@ function exitWalk() {
   ctrlP.update();
 }
 renderer.domElement.addEventListener('click', () => {
-  if (mode === 'walk' && !matchMedia('(pointer: coarse)').matches && !document.pointerLockElement) renderer.domElement.requestPointerLock?.();
+  if (mode === 'walk' && !paintMode && !matchMedia('(pointer: coarse)').matches && !document.pointerLockElement) renderer.domElement.requestPointerLock?.();
 });
 document.addEventListener('mousemove', e => {
   if (mode !== 'walk' || document.pointerLockElement !== renderer.domElement) return;
@@ -870,6 +1010,41 @@ $('#tglPlan').onchange = e => { overlay.visible = e.target.checked; };
 $('#tglSnap').onchange = e => { snapOn = e.target.checked; };
 $('#tglCut').onchange = e => { cutOn = e.target.checked; };
 $('#tglCeil').onchange = e => { ceilOn = e.target.checked; };
+// 牆面油漆面板
+const WALL_SWATCHES = [
+  ['#f3f0ea', '原色白'], ['#efe9df', '米白'], ['#e6e1d6', '燕麥白'], ['#d9d4cb', '暖灰'], ['#c4c2bd', '淺灰'], ['#9a9d98', '灰'],
+  ['#5c5f63', '深灰'], ['#b9c2b0', '灰綠'], ['#a9b8c2', '霧藍'], ['#d8b8a0', '奶茶'], ['#c08a6b', '陶土'], ['#8a7a6b', '可可'],
+];
+function setPaintMode(on) {
+  paintMode = on;
+  document.body.classList.toggle('paint-mode', on);
+  $('#btnPaint').classList.toggle('on', on);
+  if (on) { select(null); if (document.pointerLockElement) document.exitPointerLock(); toast('點畫面中的牆面即可刷上顏色'); }
+}
+$('#btnPaint').onclick = () => setPaintMode(!paintMode);
+$('#paintClose').onclick = () => setPaintMode(false);
+{
+  const sw = $('#paintSw');
+  const syncBrush = () => {
+    $('#paintColor').value = brush.color; $('#paintFinish').value = brush.finish;
+    sw.querySelectorAll('.sw').forEach(b => b.classList.toggle('on', b.dataset.c === brush.color));
+    $('#paintErase').classList.toggle('on', !!brush.erase);
+  };
+  for (const [c, n] of WALL_SWATCHES) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sw'; b.style.background = c; b.title = n; b.dataset.c = c; b.setAttribute('aria-label', n);
+    b.onclick = () => { brush.color = c; brush.erase = false; syncBrush(); };
+    sw.appendChild(b);
+  }
+  $('#paintColor').addEventListener('input', e => { brush.color = e.target.value; brush.erase = false; syncBrush(); });
+  $('#paintFinish').addEventListener('change', e => { brush.finish = e.target.value; brush.erase = false; syncBrush(); });
+  $('#paintErase').onclick = () => { brush.erase = !brush.erase; syncBrush(); };
+  $('#paintReset').onclick = () => {
+    if (!paints.length || !confirm('把所有牆面還原成原本的白色？')) return;
+    paints = []; savePaints(); buildWalls(); toast('牆面已全部還原');
+  };
+  syncBrush();
+}
 $('#btnUndo').onclick = undo;
 $('#btnRedo').onclick = redo;
 $('#btnReset').onclick = () => {
@@ -888,7 +1063,7 @@ $('#btnShot').onclick = () => {
   download(url, 'floorplan-3d.png');
 };
 $('#btnExport').onclick = () => {
-  const blob = new Blob([JSON.stringify({ v: 2, items, plans }, null, 1)], { type: 'application/json' });
+  const blob = new Blob([JSON.stringify({ v: 2, items, plans, walls: paints }, null, 1)], { type: 'application/json' });
   const url = URL.createObjectURL(blob); download(url, 'floorplan-layout.json'); setTimeout(() => URL.revokeObjectURL(url), 2000);
 };
 $('#btnImport').onclick = () => $('#fileImport').click();
@@ -898,6 +1073,7 @@ $('#fileImport').onchange = async e => {
     const data = JSON.parse(await f.text());
     if (!Array.isArray(data.items)) throw new Error('格式不符');
     const added = importPlans(data.plans);
+    if (Array.isArray(data.walls)) { paints = sanitizePaints(data.walls); savePaints(); buildWalls(); }
     setItems(data.items.map(sanitize).filter(Boolean)); commit();
     toast(added ? `已匯入配置與 ${added} 個方案` : '已匯入配置');
   } catch (err) { toast('匯入失敗：' + err.message); }
@@ -984,17 +1160,20 @@ async function encodeLayout(list) {
     if (k === 'color2' && (v === def.color2 || !v)) return 0;
     return typeof v === 'number' ? Math.round(v) : v;
   }));
-  const bytes = new TextEncoder().encode(JSON.stringify(rows));
+  const bytes = new TextEncoder().encode(JSON.stringify(paints.length ? { i: rows, w: paints } : rows));
   const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'));
   const buf = new Uint8Array(await new Response(stream).arrayBuffer());
   let s = ''; buf.forEach(b => s += String.fromCharCode(b));
   return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
+let sharedWalls = null;
 async function decodeLayout(code) {
   const b = atob(code.replace(/-/g, '+').replace(/_/g, '/'));
   const bytes = Uint8Array.from(b, c => c.charCodeAt(0));
   const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
-  const rows = JSON.parse(await new Response(stream).text());
+  const parsed = JSON.parse(await new Response(stream).text());
+  const rows = Array.isArray(parsed) ? parsed : parsed.i;
+  sharedWalls = Array.isArray(parsed) ? null : sanitizePaints(parsed.w);
   return rows.map(r => { const o = {}; KEYS.forEach((k, i) => { if (r[i] !== 0 || ['x', 'z', 'rot', 'elev'].includes(k)) o[k] = r[i]; }); return sanitize(o); }).filter(Boolean);
 }
 
@@ -1043,7 +1222,7 @@ function planThumb() {
 
 function saveNewPlan(name) {
   name = (name || '').trim() || `方案 ${plans.length + 1}`;
-  const p = { id: 'p' + Date.now().toString(36), name: name.slice(0, 30), items: cloneItems(), savedAt: Date.now(), thumb: planThumb() };
+  const p = { id: 'p' + Date.now().toString(36), name: name.slice(0, 30), items: cloneItems(), walls: JSON.parse(JSON.stringify(paints)), savedAt: Date.now(), thumb: planThumb() };
   const prev = activePlan;
   plans.unshift(p); activePlan = p.id;
   if (!savePlans()) { plans.shift(); activePlan = prev; return; }
@@ -1053,7 +1232,7 @@ function overwritePlan(id, ask = true) {
   const p = getPlan(id); if (!p) return;
   if (ask && !confirm(`用目前的擺設覆蓋「${p.name}」？`)) return;
   const old = { items: p.items, savedAt: p.savedAt, thumb: p.thumb }, prev = activePlan;
-  Object.assign(p, { items: cloneItems(), savedAt: Date.now(), thumb: planThumb() });
+  Object.assign(p, { items: cloneItems(), walls: JSON.parse(JSON.stringify(paints)), savedAt: Date.now(), thumb: planThumb() });
   activePlan = id;
   if (!savePlans()) { Object.assign(p, old); activePlan = prev; return; }
   renderPlans(); updatePlanState(); toast(`已更新「${p.name}」`);
@@ -1066,6 +1245,7 @@ function loadPlan(id) {
     if (!confirm(`${what}，載入「${p.name}」後會被取代（可按復原找回）。要繼續嗎？`)) return;
   }
   setItems(p.items.map(sanitize).filter(Boolean));
+  if (Array.isArray(p.walls)) { paints = sanitizePaints(p.walls); savePaints(); buildWalls(); }
   activePlan = id; savePlans();
   commit(); renderPlans(); toast(`已載入「${p.name}」`);
 }
@@ -1162,7 +1342,7 @@ function loop() {
 async function init() {
   let list = null, fromShare = false;
   const m = location.hash.match(/#L=([\w-]+)/);
-  if (m) { try { list = await decodeLayout(m[1]); fromShare = true; } catch { toast('分享連結無法讀取，改用本機配置'); } }
+  if (m) { try { list = await decodeLayout(m[1]); fromShare = true; if (sharedWalls) { paints = sharedWalls; buildWalls(); } } catch { toast('分享連結無法讀取，改用本機配置'); } }
   if (!list) {
     try { const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); if (s && Array.isArray(s.items)) {
       list = s.items.map(sanitize).filter(Boolean);

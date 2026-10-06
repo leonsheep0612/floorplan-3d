@@ -6,7 +6,7 @@
 <title>無印風公寓 3D 擺設</title>
 <meta name="description" content="依平面圖建立的 3D 户型，可自由擺放、移動、旋轉家具。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='3' fill='%23f3f0ea' stroke='%2356575a' stroke-width='3'/%3E%3Cpath d='M16 3v14h13M3 19h8' stroke='%2356575a' stroke-width='3' fill='none'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=8">
+<link rel="stylesheet" href="css/style.css?v=9">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -84,6 +84,7 @@
     <label class="chk" title="擋住視線的牆自動降成矮牆"><input id="tglCut" type="checkbox" checked> 透視牆</label>
     <label class="chk ceil-chk" title="人視角與漫遊時顯示天花板"><input id="tglCeil" type="checkbox" checked> 天花板</label>
     <label class="chk"><input id="tglPlan" type="checkbox"> 原始平面圖</label>
+    <button id="btnPaint" class="tool-btn" type="button" title="選顏色與漆種後點牆面套用">🖌 牆面油漆</button>
   </div>
   <div id="coords" class="coords" hidden></div>
   <div class="hint only-desktop" id="hint">
@@ -142,6 +143,31 @@
       <button id="pDup" class="btn" title="複製 (Ctrl+D)">複製</button>
       <button id="pDel" class="btn danger" title="刪除 (Delete)">刪除</button>
     </div>
+  </div>
+</section>
+
+<section id="paintPanel" class="paint-panel" aria-label="牆面油漆">
+  <div class="props-head">
+    <div><b class="pp-title">🖌 牆面油漆</b><small>選好顏色與漆種，點畫面中的牆面即可套用</small></div>
+    <button id="paintClose" class="icon-btn" aria-label="關閉"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="props-body">
+    <div class="row"><span class="lbl">漆種</span>
+      <select id="paintFinish">
+        <option value="matte">平光乳膠漆</option>
+        <option value="lime">礦物石灰漆（雲紋）</option>
+        <option value="micro">微水泥</option>
+        <option value="concrete">清水模漆</option>
+        <option value="pearl">珠光藝術漆</option>
+      </select>
+    </div>
+    <div class="row"><span class="lbl">顏色</span><input id="paintColor" type="color"></div>
+    <div class="swatches" id="paintSw"></div>
+    <div class="actions two">
+      <button id="paintErase" class="btn" type="button" title="開啟後點牆面可還原成原本的白色">橡皮擦</button>
+      <button id="paintReset" class="btn danger" type="button">全部還原</button>
+    </div>
+    <p class="pp-tip">同一平面相連的牆段（含窗台下方、窗楣上方）會一起刷。建議切到「人視角」或「漫遊」刷，看得最清楚。</p>
   </div>
 </section>
 
@@ -214,6 +240,9 @@
       <p>畫面中的 <b>人形</b>（書房・其他分類）身高 170cm，可以拖到家具旁邊比對高度；改「高」就能換成家人的身高。</p>
       <h4>衣櫃</h4>
       <p>主臥預設是 <b>IKEA BOAXEL 壁掛衣櫃</b>，寬 240cm（4 格各 60cm：長版吊掛、上下兩層吊掛、層板＋網籃、長版吊掛），深 40cm、高 201cm。臥室分類的「款式」可換成開放式衣櫃或有門衣櫃。</p>
+      <h4>牆面油漆（特殊漆）</h4>
+      <p>畫面左上的 <b>「🖌 牆面油漆」</b> 開啟後，選顏色與漆種（平光乳膠漆、礦物石灰漆、微水泥、清水模漆、珠光藝術漆），再點牆面就會刷上；同一平面相連的牆段會一起刷。「橡皮擦」可還原單面牆、「全部還原」恢復白牆。牆色會跟著方案、分享連結與匯出檔一起儲存。</p>
+      <p>冰箱、櫃子等家具的顏色則是點選家具後，在屬性面板用色盤或色票調整。</p>
       <h4>天花板軌道燈</h4>
       <p>客廳、餐廚和主臥的天花板預設有 <b>軌道燈</b>（燈具分類），可以拖曳移動、旋轉，改「寬」就是軌道長度，燈頭數量會自動增減。</p>
       <h4>懸空與吊掛家具</h4>
@@ -320,6 +349,6 @@
 <div id="toast" class="toast" role="status"></div>
 <div class="loading" id="loading"><span></span>載入 3D 場景…</div>
 
-<script type="module" src="js/main.js?v=8"></script>
+<script type="module" src="js/main.js?v=9"></script>
 </body>
 </html>
