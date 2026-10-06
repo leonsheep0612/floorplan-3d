@@ -101,10 +101,10 @@ const woodTex = canvasTex(1024, (g, n) => {
   for (let i = 0; i < rows; i++) {
     const off = r() * pl;
     for (let x = -pl; x < n + pl; x += pl) {
-      const l = 40 + r() * 9, hue = 26 + r() * 6;
-      g.fillStyle = `hsl(${hue},32%,${l}%)`;
+      const l = 33 + r() * 8, hue = 24 + r() * 6;
+      g.fillStyle = `hsl(${hue},15%,${l}%)`;
       g.fillRect(x + off, i * rh, pl, rh);
-      g.strokeStyle = `hsla(${hue},30%,${l - 12}%,0.25)`; g.lineWidth = 1;
+      g.strokeStyle = `hsla(${hue},18%,${l - 10}%,0.3)`; g.lineWidth = 1;
       for (let k = 0; k < 7; k++) {
         const y = i * rh + 3 + r() * (rh - 6);
         g.beginPath(); g.moveTo(x + off, y);
@@ -125,8 +125,8 @@ const tileTex = (base, grout, tiles = 2) => canvasTex(512, (g, n) => {
   }
 }, 120);
 const FLOORS = {
-  wood: new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.62 }),
-  tile: new THREE.MeshStandardMaterial({ map: tileTex('#a9a8a3', '#8d8c88', 4), roughness: 0.5 }),
+  wood: new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.55 }),
+  tile: new THREE.MeshStandardMaterial({ map: tileTex('#8e8b86', '#76736e', 2), roughness: 0.5 }),
   tileLight: new THREE.MeshStandardMaterial({ map: tileTex('#cfcac1', '#b3aea5', 2), roughness: 0.7 }),
 };
 const WALL_SIDE = new THREE.MeshStandardMaterial({ color: '#f3f0ea', roughness: 0.92 });
@@ -203,7 +203,7 @@ function buildWalls() {
       const pc = horiz ? mz : mx;
       const hinge = op.hinge ? a2 - 2.5 : a1 + 2.5;
       const leafLen = len - 4, p = pc + op.swing * (th / 2 + leafLen / 2);
-      const leafMat = mat(op.main ? '#6d5847' : '#b88a5c', { r: 0.55 });
+      const leafMat = mat(op.main ? '#2f2420' : '#3b2c25', { r: 0.55 });
       if (horiz) plain(4, dh, leafLen, hinge, 0, p, leafMat); else plain(leafLen, dh, 4, p, 0, hinge, leafMat);
       // 門檻
       const sill = mat('#bdb7ad', { r: 0.6 });
@@ -764,7 +764,45 @@ $('#shareCopy').onclick = async () => {
 };
 $('#btnRef').onclick = () => $('#refDlg').showModal();
 $$('dialog .dlg-close').forEach(b => b.onclick = () => b.closest('dialog').close());
-$('#btnHelp').onclick = () => $('#helpDlg').showModal();
+// ── 操作手冊 ─────────────────────────────────────────────
+const GUIDE_KEY = 'fp3d.guide';
+const guide = $('#guide'), guidePill = $('#guidePill');
+const guideTabs = $$('.guide-tabs button');
+let guidePageIdx = 0;
+function guideGo(i) {
+  guidePageIdx = Math.max(0, Math.min(guideTabs.length - 1, i));
+  const key = guideTabs[guidePageIdx].dataset.g;
+  guideTabs.forEach(b => b.classList.toggle('on', b.dataset.g === key));
+  $$('.guide-body article').forEach(a => a.classList.toggle('on', a.dataset.g === key));
+  $('.guide-body').scrollTop = 0;
+  guideTabs[guidePageIdx].scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  $('#guidePage').textContent = `${guidePageIdx + 1} / ${guideTabs.length}`;
+  $('#guidePrev').disabled = guidePageIdx === 0;
+  $('#guideNext').textContent = guidePageIdx === guideTabs.length - 1 ? '開始使用' : '下一頁';
+}
+function guideOpen(page) {
+  guide.hidden = false; guidePill.hidden = true;
+  requestAnimationFrame(() => guide.classList.add('show'));
+  if (page != null) guideGo(page);
+  try { localStorage.setItem(GUIDE_KEY, 'open'); } catch { /* 忽略 */ }
+}
+function guideMinimize() {
+  guide.classList.remove('show');
+  setTimeout(() => { guide.hidden = true; guidePill.hidden = false; }, 220);
+  try { localStorage.setItem(GUIDE_KEY, 'min'); } catch { /* 忽略 */ }
+}
+guideTabs.forEach((b, i) => b.onclick = () => guideGo(i));
+$('#guidePrev').onclick = () => guideGo(guidePageIdx - 1);
+$('#guideNext').onclick = () => guidePageIdx === guideTabs.length - 1 ? guideMinimize() : guideGo(guidePageIdx + 1);
+$('#guideMin').onclick = guideMinimize;
+guidePill.onclick = () => guideOpen();
+$('#btnHelp').onclick = () => { document.body.classList.remove('more-open'); guideOpen(); };
+guideGo(0);
+{
+  let st = null;
+  try { st = localStorage.getItem(GUIDE_KEY); } catch { /* 忽略 */ }
+  if (st === 'min') guidePill.hidden = false; else guideOpen(0);
+}
 $('#btnLib').onclick = () => document.body.classList.toggle('lib-open');
 $('#libScrim').onclick = () => document.body.classList.remove('lib-open');
 $('#btnMore').onclick = e => { e.stopPropagation(); document.body.classList.toggle('more-open'); };

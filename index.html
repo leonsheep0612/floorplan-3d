@@ -43,7 +43,7 @@
         <button id="btnImport">匯入配置 JSON</button>
         <hr>
         <button id="btnRef">查看原始參考圖</button>
-        <button id="btnHelp">操作說明</button>
+        <button id="btnHelp">操作手冊</button>
         <hr>
         <button id="btnReset">還原預設配置</button>
         <button id="btnClear" class="danger">清空家具</button>
@@ -143,24 +143,121 @@
   <div class="dlg-foot"><button class="btn dlg-close">關閉</button></div>
 </dialog>
 
-<dialog id="helpDlg" class="dlg">
-  <h3>操作說明</h3>
-  <table class="keys">
-    <tr><td>新增家具</td><td>點左側家具庫，或拖曳到畫面上</td></tr>
-    <tr><td>移動</td><td>按住家具拖曳（自動吸附 5cm 格線與牆面）</td></tr>
-    <tr><td><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd></td><td>順 / 逆時針旋轉 90°</td></tr>
-    <tr><td><kbd>Q</kbd> / <kbd>E</kbd></td><td>旋轉 15°</td></tr>
-    <tr><td>方向鍵</td><td>微調 5cm（加 Shift 為 1cm）</td></tr>
-    <tr><td><kbd>Delete</kbd></td><td>刪除選取家具</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>複製</td></tr>
-    <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>復原 / 重做</td></tr>
-    <tr><td><kbd>T</kbd></td><td>切換 3D / 平面</td></tr>
-    <tr><td><kbd>F</kbd></td><td>重設視角</td></tr>
-    <tr><td>漫遊</td><td>WASD 移動、滑鼠轉向；手機用畫面上的方向鍵</td></tr>
-  </table>
-  <p class="note">配置會自動存在這個瀏覽器。換裝置或給別人看，請用「分享」產生連結。尺寸依 1/40 平面圖換算，僅供參考，實際以現場丈量為準。</p>
-  <div class="dlg-foot"><button class="btn dlg-close">關閉</button></div>
-</dialog>
+<section id="guide" class="guide" aria-label="操作手冊" hidden>
+  <div class="guide-head">
+    <div class="guide-title"><span class="guide-ico">📖</span><h3>操作手冊</h3></div>
+    <div class="guide-ctrl">
+      <button id="guideMin" class="icon-btn" title="縮小到角落" aria-label="縮小"><svg viewBox="0 0 24 24"><path d="M5 19h14"/></svg></button>
+    </div>
+  </div>
+  <nav class="guide-tabs" role="tablist">
+    <button data-g="start" class="on">開始</button>
+    <button data-g="furn">擺家具</button>
+    <button data-g="view">視角</button>
+    <button data-g="save">儲存</button>
+    <button data-g="share">一起設計</button>
+    <button data-g="keys">快捷鍵</button>
+  </nav>
+  <div class="guide-body">
+    <article data-g="start" class="on">
+      <p class="lead">這是依照實際尺寸平面圖（1/40）建立的 3D 户型，可以在瀏覽器裡自由擺放家具。</p>
+      <ol class="steps">
+        <li><b>看整體</b>：滑鼠左鍵拖曳旋轉、右鍵拖曳平移、滾輪縮放。手機用單指旋轉、雙指縮放與平移。</li>
+        <li><b>移動家具</b>：直接按住家具拖曳到想要的位置。</li>
+        <li><b>新增家具</b>：從左側「家具庫」點一下或拖進畫面（手機點左上角 ☰ 打開）。</li>
+        <li><b>調整</b>：點選家具後，右側（手機在下方）會出現面板，可改尺寸、顏色、旋轉。</li>
+      </ol>
+      <p class="tip">所有修改都會自動存在這個瀏覽器，不用按儲存。</p>
+    </article>
+    <article data-g="furn">
+      <h4>新增</h4>
+      <p>左側家具庫可依分類或搜尋找家具，點一下會放在畫面中央，或直接拖曳到想放的位置。</p>
+      <h4>移動與對齊</h4>
+      <p>按住拖曳即可移動，會自動吸附 5cm 格線並貼齊牆面。想自由擺放時，取消上方的「吸附」。用方向鍵可微調 5cm（加 Shift 為 1cm）。</p>
+      <h4>屬性面板</h4>
+      <ul>
+        <li><b>名稱</b>：點標題可改名，例如「媽媽的書桌」。</li>
+        <li><b>寬／深／高</b>：輸入實際尺寸（cm）。</li>
+        <li><b>離地</b>：例如電視放在櫃子上、吊櫃。</li>
+        <li><b>旋轉</b>：拖曳滑桿，或按 ⟲ ⟳ 轉 90°。</li>
+        <li><b>顏色／配色</b>：主色與布料、床單等第二色；「預設」可還原。</li>
+        <li><b>複製／刪除</b>：在面板下方。</li>
+      </ul>
+      <p class="tip">選取時地上的橘色箭頭代表家具「正面」朝向。</p>
+    </article>
+    <article data-g="view">
+      <h4>三種視角（上方切換）</h4>
+      <ul>
+        <li><b>3D</b>：鳥瞰立體，適合看整體感覺。</li>
+        <li><b>平面</b>：正上方俯視，最適合精準排位置。</li>
+        <li><b>漫遊</b>：以 155cm 的視線高度在屋內走動。電腦點畫面後用 WASD 移動、滑鼠轉向（Shift 加速、Esc 釋放滑鼠）；手機拖曳畫面轉向、用右下方向鍵移動。</li>
+      </ul>
+      <h4>畫面選項（左上角）</h4>
+      <ul>
+        <li><b>全高牆／半牆／低牆</b>：牆擋住視線時切到半牆或低牆。</li>
+        <li><b>標示</b>：顯示房間名稱與面積。</li>
+        <li><b>原始平面圖</b>：把尺寸圖疊在地板上對照。</li>
+      </ul>
+      <p>左側「空間」清單點房間名稱可直接飛過去；右上 ⛶ 重設視角。</p>
+    </article>
+    <article data-g="save">
+      <h4>自動儲存</h4>
+      <p>每次修改都會自動存在<b>目前這台裝置的這個瀏覽器</b>，關掉再開還在。</p>
+      <h4>要注意</h4>
+      <ul>
+        <li>換手機、換電腦或換瀏覽器看不到，要用「分享」連結帶過去。</li>
+        <li>清除瀏覽器資料、或用無痕模式，擺設會消失。</li>
+        <li>牆高、標示等畫面設定不會記住。</li>
+      </ul>
+      <h4>備份與還原（右上 ⋯ 選單）</h4>
+      <ul>
+        <li><b>匯出配置 JSON</b>：下載成檔案備份。</li>
+        <li><b>匯入配置 JSON</b>：從檔案還原。</li>
+        <li><b>下載截圖 PNG</b>：存目前畫面。</li>
+        <li><b>還原預設配置</b>：回到一開始的擺設。</li>
+      </ul>
+      <p class="tip">改錯了？按上方 ↶ 復原（Ctrl+Z）。</p>
+    </article>
+    <article data-g="share">
+      <h4>傳給別人看或一起改</h4>
+      <ol class="steps">
+        <li>擺好後按右上角 <b>「分享」</b>，複製連結。</li>
+        <li>用 LINE、Email 傳給對方，對方打開就會看到一模一樣的擺設。</li>
+        <li>對方可以直接修改，改完也按「分享」把新連結傳回來。</li>
+        <li>你打開新連結，就能接著對方的版本繼續改。</li>
+      </ol>
+      <h4>注意事項</h4>
+      <ul>
+        <li>每個連結都是當下的<b>快照</b>，之後再改要重新分享。</li>
+        <li>沒有自動合併，建議講好「現在輪到誰改」，不要兩人同時各改各的。</li>
+        <li>打開分享連結並修改後，會取代你瀏覽器裡原本的擺設；想保留請先「匯出配置 JSON」備份。</li>
+        <li>連結被截斷打不開時，改用「匯出配置 JSON」傳檔案，對方用「匯入」開啟。</li>
+      </ul>
+    </article>
+    <article data-g="keys">
+      <table class="keys">
+        <tr><td><kbd>R</kbd> / <kbd>Shift</kbd>+<kbd>R</kbd></td><td>順 / 逆時針旋轉 90°</td></tr>
+        <tr><td><kbd>Q</kbd> / <kbd>E</kbd></td><td>旋轉 15°</td></tr>
+        <tr><td>方向鍵</td><td>微調 5cm（加 Shift 為 1cm）</td></tr>
+        <tr><td><kbd>Delete</kbd></td><td>刪除選取家具</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>D</kbd></td><td>複製</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Z</kbd></td><td>復原</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></td><td>重做</td></tr>
+        <tr><td><kbd>Esc</kbd></td><td>取消選取</td></tr>
+        <tr><td><kbd>T</kbd></td><td>切換 3D / 平面</td></tr>
+        <tr><td><kbd>F</kbd></td><td>重設視角</td></tr>
+        <tr><td><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></td><td>漫遊移動（Shift 加速）</td></tr>
+      </table>
+      <p class="note">尺寸依 1/40 平面圖換算，僅供參考，實際以現場丈量為準。</p>
+    </article>
+  </div>
+  <div class="guide-foot">
+    <button id="guidePrev" class="btn">上一頁</button>
+    <span id="guidePage" class="guide-page">1 / 6</span>
+    <button id="guideNext" class="btn primary">下一頁</button>
+  </div>
+</section>
+<button id="guidePill" class="guide-pill" hidden aria-label="打開操作手冊"><span>📖</span><b>操作手冊</b></button>
 
 <div id="toast" class="toast" role="status"></div>
 <div class="loading" id="loading"><span></span>載入 3D 場景…</div>
