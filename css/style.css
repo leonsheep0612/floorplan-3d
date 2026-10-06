@@ -308,3 +308,12 @@ body[data-mode="walk"] .guide-pill { bottom: 150px; }
 #pStyleRow[hidden] { display: none; }
 #pStyle { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 7px; padding: 5px 6px; font: inherit; font-size: 13px; background: #fff; }
 body[data-mode="3d"] .ceil-chk, body[data-mode="top"] .ceil-chk { display: none; }
+
+/* 色票 */
+.sw-block { display: flex; align-items: flex-start; gap: 8px; }
+.sw-block[hidden] { display: none; }
+.sw-block .lbl { padding-top: 2px; width: 26px; }
+.swatches { display: flex; flex-wrap: wrap; gap: 5px; }
+.sw { width: 20px; height: 20px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, .15); padding: 0; cursor: pointer; transition: transform .12s; }
+.sw:hover { transform: scale(1.18); }
+@media (max-width: 820px) { .sw { width: 24px; height: 24px; } }

@@ -78,20 +78,36 @@ function sofaStyled(o, s) {
   const cushT = 13, baseH = Math.max(6, seatH - legH - cushT);
   if (legH > 3) {
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const l = C(g, s.metalLeg ? 1 : 2, s.metalLeg ? 1 : 1.4, legH, sx * (w / 2 - 6), 0, sz * (d / 2 - 6), leg, 10);
-      if (!s.metalLeg) l.rotation.z = sx * 0.08;
+      const l = C(g, s.metalLeg ? 1 : 2, s.metalLeg ? 0.8 : 1.4, legH, sx * (w / 2 - 8), 0, sz * (d / 2 - 8), leg, 10);
+      if (s.splay) { l.rotation.z = sx * 0.22; l.rotation.x = -sz * 0.22; }
+      else if (!s.metalLeg) l.rotation.z = sx * 0.08;
     }
   }
   B(g, w, baseH, d, 0, legH, 0, fab, Math.min(round, 3));
-  B(g, w, h - legH, backD, 0, legH, -d / 2 + backD / 2, fab, round);
-  for (const sx of [-1, 1]) B(g, arm, armH - legH, d, sx * (w / 2 - arm / 2), legH, 0, fab, round);
+  const backTop = s.backFrame ? h * s.backFrame : h;
+  B(g, w, backTop - legH, backD, 0, legH, -d / 2 + backD / 2, fab, round);
+  for (const sx of [-1, 1]) {
+    if (s.rollArm) {
+      // 圓弧扶手：下方方塊＋上緣半圓捲邊
+      const rr = arm / 2;
+      B(g, arm, armH - legH - rr, d, sx * (w / 2 - rr), legH, 0, fab, round);
+      const roll = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr, d - 2, 28), fab);
+      roll.rotation.x = Math.PI / 2; roll.position.set(sx * (w / 2 - rr), armH - rr, 0); roll.castShadow = true; g.add(roll);
+      for (const sz of [-1, 1]) { const cap = new THREE.Mesh(new THREE.SphereGeometry(rr, 20, 12), fab); cap.scale.z = 0.35; cap.position.set(sx * (w / 2 - rr), armH - rr, sz * (d / 2 - 1)); g.add(cap); }
+    } else B(g, arm, armH - legH, d, sx * (w / 2 - arm / 2), legH, 0, fab, round);
+  }
   const inner = w - 2 * arm;
   const n = s.n ?? (inner > 150 ? 3 : inner > 95 ? 2 : 1), cw = inner / n;
   for (let i = 0; i < n; i++) {
     const x = -inner / 2 + cw * (i + 0.5);
     B(g, cw - 1.2, cushT + 2, d - backD - 2, x, legH + baseH - 2, backD / 2 + 1, cush, Math.min(round, 5));
-    if (s.backCush !== false) {
-      const bc = B(g, cw - 3, Math.max(10, h - seatH - 2), 15, x, seatH - 1, -d / 2 + backD + 6, cush, 6);
+  }
+  if (s.backCush !== false) {
+    // 背墊數可與座墊數不同（例如兩座墊三頭枕）
+    const bn = s.backN ?? n, bw = inner / bn;
+    for (let i = 0; i < bn; i++) {
+      const x = -inner / 2 + bw * (i + 0.5);
+      const bc = B(g, bw - 3, Math.max(10, h - seatH - 2), 15, x, seatH - 1, -d / 2 + backD + (s.backFrame ? -2 : 6), cush, 6);
       bc.rotation.x = -0.12;
     }
   }
@@ -366,6 +382,255 @@ function trackLight({ w, d, h, color }) {
   return g;
 }
 
+// ── 圓弧造型 ─────────────────────────────────────────────
+// 弧形扇面（給弧形沙發座面／椅背），中心在前方
+function arcSector(rIn, rOut, t0, t1, height, m, bevel = 3) {
+  const sh = new THREE.Shape();
+  sh.absarc(0, 0, rOut, t0, t1, false);
+  sh.absarc(0, 0, rIn, t1, t0, true);
+  const geo = new THREE.ExtrudeGeometry(sh, { depth: Math.max(1, height - 2 * bevel), bevelEnabled: true, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 3, curveSegments: 40 });
+  const mesh = new THREE.Mesh(geo, m);
+  mesh.rotation.x = -Math.PI / 2; mesh.castShadow = mesh.receiveShadow = true;
+  return mesh;
+}
+// 弧形沙發：靠背呈弧線包覆，無扶手
+function curvedSofa({ w, d, h, color, color2 }) {
+  const g = new THREE.Group(), fab = mat(color, { r: 0.95 }), cush = mat(shade(color, 0.07), { r: 0.95 }), leg = mat(color2, { r: 0.5 });
+  const sd = d * 0.62, s = d - sd, R = (w * w / 4 + s * s) / (2 * s), A = Math.asin(Math.min(1, (w / 2) / R));
+  const cz = -d / 2 + R, t0 = Math.PI / 2 - A, t1 = Math.PI / 2 + A, legH = 8, backT = 18;
+  const place = (m, y) => { m.position.set(0, y, cz); g.add(m); };
+  // 形狀座標 y = -z，所以中心放在 z = cz
+  place(arcSector(R - sd - backT * 0.2, R - 2, t0 + 0.02, t1 - 0.02, 20, fab, 3), legH);
+  place(arcSector(R - sd + 2, R - backT, t0 + 0.04, t1 - 0.04, 14, cush, 5), legH + 18);
+  place(arcSector(R - backT, R, t0, t1, h - legH, fab, 6), legH);
+  for (const a of [-A * 0.8, 0, A * 0.8]) for (const rr of [R - 8, R - sd + 6]) C(g, 2, 1.5, legH, Math.sin(a) * rr, 0, cz - Math.cos(a) * rr, leg, 10);
+  return g;
+}
+// 圓桶單人椅／旋轉休閒椅：弧形椅殼＋圓座墊
+function roundChair({ w, d, h, color, color2 }, s = {}) {
+  const g = new THREE.Group(), fab = mat(color, { r: 0.95, ds: true }), cush = mat(shade(color, 0.08), { r: 0.95 }), base = mat(color2, { r: 0.4, m: s.swivel ? 0.5 : 0 });
+  const R = Math.min(w, d) / 2 - 3, seatY = s.seatH ?? 40, legH = s.swivel ? 0 : 14;
+  if (s.swivel) { C(g, R * 0.6, R * 0.65, 2, 0, 0, 0, base, 32); C(g, 3, 3, seatY - 14, 0, 2, 0, base, 16); }
+  else for (let i = 0; i < 4; i++) { const a = Math.PI / 4 + (i * Math.PI) / 2; C(g, 1.8, 1.3, legH, Math.sin(a) * R * 0.7, 0, Math.cos(a) * R * 0.7, base, 10); }
+  const y0 = s.swivel ? seatY - 14 : legH;
+  const bowl = new THREE.Mesh(new THREE.CylinderGeometry(R, R * 0.92, seatY - y0 - 6, 40), fab);
+  bowl.position.y = y0 + (seatY - y0 - 6) / 2; bowl.castShadow = true; g.add(bowl);
+  const seat = new THREE.Mesh(new THREE.CylinderGeometry(R * 0.86, R * 0.88, 10, 40), cush);
+  seat.position.set(0, seatY - 4, 2); seat.castShadow = true; g.add(seat);
+  const L = s.arc ?? 4.4, bh = h - y0 - 4;
+  const shell = new THREE.Mesh(new THREE.CylinderGeometry(R, R, bh, 48, 1, true, Math.PI - L / 2, L), fab);
+  shell.position.y = y0 + bh / 2; shell.castShadow = true; g.add(shell);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(R - 3, 4, 12, 48, L), fab);
+  rim.rotation.x = -Math.PI / 2;
+  const rg = new THREE.Group(); rg.add(rim); rg.position.y = h - 4; rg.rotation.y = Math.PI / 2 - L / 2; g.add(rg);
+  const inner = new THREE.Mesh(new THREE.CylinderGeometry(R - 6, R - 6, bh - 12, 48, 1, true, Math.PI - L / 2 + 0.1, L - 0.2), cush);
+  inner.position.y = seatY + (bh - 12) / 2 - 2; g.add(inner);
+  return g;
+}
+// 高背扶手椅（STRANDMON 類）：翼型椅背＋捲邊扶手＋木腳
+function wingChair({ w, d, h, color, color2 }) {
+  const g = new THREE.Group(), fab = mat(color, { r: 0.95 }), cush = mat(shade(color, 0.07), { r: 0.95 }), leg = mat(color2, { r: 0.5 });
+  const legH = 16, arm = 14;
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) C(g, 2.2, 1.6, legH, sx * (w / 2 - 6), 0, sz * (d / 2 - 8), leg, 12);
+  B(g, w - 4, 16, d - 6, 0, legH, 2, fab, 5);
+  B(g, w - 2 * arm - 2, 10, d - 22, 0, legH + 14, 8, cush, 5);
+  B(g, w - 8, h - legH, 18, 0, legH, -d / 2 + 11, fab, 8);
+  for (const sx of [-1, 1]) {
+    B(g, arm, 46, d - 16, sx * (w / 2 - arm / 2 - 1), legH, 4, fab, 6);
+    const roll = new THREE.Mesh(new THREE.CylinderGeometry(arm / 2 + 2, arm / 2 + 2, d - 16, 24), fab);
+    roll.rotation.x = Math.PI / 2; roll.position.set(sx * (w / 2 - arm / 2 - 1), legH + 46, 4); roll.castShadow = true; g.add(roll);
+    const wing = B(g, 8, h - legH - 50, 28, sx * (w / 2 - 6), legH + 50, -d / 2 + 22, fab, 4);
+    wing.rotation.y = sx * -0.25;
+  }
+  B(g, w - 2 * arm - 6, h - legH - 40, 10, 0, legH + 24, -d / 2 + 22, cush, 5).rotation.x = -0.1;
+  return g;
+}
+// POÄNG：彎曲木框懸臂椅
+function bentChair({ w, d, h, color, color2 }) {
+  const g = new THREE.Group(), wood = mat(color2, { r: 0.5 }), cush = mat(color, { r: 0.95 });
+  for (const sx of [-1, 1]) {
+    const x = sx * (w / 2 - 3);
+    const pts = [[d * 0.45, 2], [-d * 0.32, 2], [-d * 0.42, 6], [-d * 0.2, 22], [d * 0.25, 46], [d * 0.42, 50], [d * 0.46, 40], [d * 0.46, 2]]
+      .map(([z, y]) => new THREE.Vector3(x, y, z));
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true, 'catmullrom', 0.2), 80, 2, 8, true), wood);
+    tube.castShadow = true; g.add(tube);
+  }
+  const seat = B(g, w - 10, 9, d * 0.5, 0, 34, d * 0.1, cush, 4); seat.rotation.x = 0.18;
+  const back = B(g, w - 12, h * 0.6, 9, 0, 38, -d * 0.28, cush, 4); back.rotation.x = -0.42;
+  B(g, w - 10, 3, 4, 0, h - 8, -d * 0.48, wood, 1);
+  return g;
+}
+
+// ── 書櫃・層架 ───────────────────────────────────────────
+// KALLAX 方格櫃
+function kallax({ w, d, h, color, color2 }) {
+  const g = new THREE.Group(), m = mat(color, { r: 0.6 }), t = 4, ti = 1.6;
+  const cols = Math.max(1, Math.round((w - t) / 37)), rows = Math.max(1, Math.round((h - t) / 37));
+  B(g, w, t, d, 0, 0, 0, m); B(g, w, t, d, 0, h - t, 0, m, 0.5);
+  for (const s of [-1, 1]) B(g, t, h - 2 * t, d, s * (w / 2 - t / 2), t, 0, m);
+  const cw = (w - 2 * t) / cols, rh = (h - 2 * t) / rows;
+  for (let i = 1; i < cols; i++) B(g, ti, h - 2 * t, d, -w / 2 + t + cw * i, t, 0, m);
+  for (let j = 1; j < rows; j++) B(g, w - 2 * t, ti, d, 0, t + rh * j - ti / 2, 0, m);
+  const box = mat(color2, { r: 0.9 }), pal = ['#8c6d5a', '#5d7287', '#c9b79c', '#7a8a6b', '#e4dccd', '#3e4a59'];
+  let k = 7;
+  for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+    k = (k * 7 + 3) % 97;
+    const x = -w / 2 + t + cw * (i + 0.5), y = t + rh * j + ti / 2;
+    if (k % 3 === 0) B(g, cw - 4, rh - 5, d - 4, x, y, 1, box, 1.5);
+    else if (k % 3 === 1) for (let b = 0; b < 6; b++) B(g, 2.6, rh * 0.7 - (b % 3) * 2, d * 0.7, x - cw / 2 + 5 + b * 3.2, y, 0, mat(pal[(k + b) % pal.length], { r: 0.8 }), 0, false);
+  }
+  return g;
+}
+// 梯形書架（靠牆斜放）
+function ladderShelf({ w, d, h, color }) {
+  const g = new THREE.Group(), m = mat(color, { r: 0.6 });
+  for (const s of [-1, 1]) {
+    const rail = B(g, 3, h / Math.cos(0.17), 4, s * (w / 2 - 1.5), 0, 0, m);
+    rail.rotation.x = 0.17; rail.position.z = 0; rail.position.y = h / 2;
+  }
+  const n = Math.max(3, Math.round(h / 42));
+  for (let i = 0; i < n; i++) {
+    const y = 8 + (h - 30) * (i / (n - 1)), depth = d * (1 - i / (n + 1)), z = d / 2 - depth / 2 - (d - depth) * 0.0;
+    B(g, w - 6, 2, depth, 0, y, z - (d - depth) / 2 + (d - depth) / 2, m, 0.4);
+  }
+  return g;
+}
+// MUJI SUS 層架：四角立柱＋側面橫桿＋鋼板層板，層數依高度
+function sus({ w, d, h, color, color2 }) {
+  const g = new THREE.Group(), m = mat(color, { r: 0.35, m: 0.55 }), sh = mat(color2 || color, { r: 0.45, m: color2 ? 0 : 0.5 });
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) B(g, 2.2, h, 2.2, sx * (w / 2 - 1.1), 0, sz * (d / 2 - 1.1), m, 0.4);
+  const n = h <= 95 ? 3 : h <= 135 ? 4 : 5;
+  for (let i = 0; i < n; i++) {
+    const y = 4 + (h - 7) * (i / (n - 1));
+    B(g, w - 4, 1.6, d - 3, 0, y, 0, sh, 0.3);
+    for (const sz of [-1, 1]) B(g, w - 4, 1.2, 1, 0, y + 1.6, sz * (d / 2 - 1), m, 0, false);
+    for (const sx of [-1, 1]) B(g, 1, 1.2, d - 4, sx * (w / 2 - 1.1), y + 1.6, 0, m, 0, false);
+  }
+  const pal = ['#e9e4da', '#c9b8a3', '#8c6d5a', '#7d8a96', '#f4f1ea'];
+  let k = 3;
+  for (let i = 0; i < n - 1; i++) {
+    k = (k * 7 + 3) % 97;
+    const y = 4 + (h - 7) * (i / (n - 1)) + 1.6;
+    if (k % 2) B(g, Math.min(36, w * 0.6), 22, d * 0.75, -w * 0.12, y, 0, mat(pal[k % pal.length], { r: 0.95 }), 2);
+    else for (let b = 0; b < 7; b++) B(g, 2.6, 20 + (b % 3) * 3, d * 0.6, -w / 2 + 6 + b * 3.3, y, 0, mat(pal[(k + b) % pal.length], { r: 0.8 }), 0, false);
+  }
+  return g;
+}
+
+// ── 書桌 ─────────────────────────────────────────────────
+// 升降桌／工作桌：桌面＋T 型雙柱腳架（h = 桌面高度，可自行調整）
+function standDesk({ w, d, h, color, color2 }, s = {}) {
+  const g = new THREE.Group(), top = mat(color, { r: 0.55 }), fr = mat(color2, { r: 0.4, m: 0.4 });
+  B(g, w, 2.5, d, 0, h - 2.5, 0, top, 0.6);
+  const lx = w / 2 - Math.min(14, w * 0.12);
+  for (const sx of [-1, 1]) {
+    B(g, 6, 3, d - 8, sx * lx, 0, 0, fr, 0.8);
+    if (s.lift !== false) {
+      B(g, 7, (h - 5) * 0.52, 5.5, sx * lx, 3, 0, fr, 0.5);
+      B(g, 5.6, (h - 5) * 0.52, 4.2, sx * lx, 3 + (h - 5) * 0.48, 0, fr, 0.5);
+    } else B(g, 5, h - 5.5, 5, sx * lx, 3, 0, fr, 0.5);
+    B(g, 5, 3, d - 10, sx * lx, h - 5.5, 0, fr, 0.5);
+  }
+  B(g, 2 * lx - 6, 4, 4, 0, h - 7, -d * 0.1, fr, 0.5);
+  if (s.lift !== false) B(g, 10, 2, 5, w / 2 - 14, h - 4.5, d / 2 - 3, mat('#2b2b2b', { r: 0.5 }), 0.8, false);
+  return g;
+}
+
+// ── 燈飾（主色＝燈罩／本體，配色＝底座／支架）──────────────
+const glow = (c, ei = 0.45) => mat(c, { r: 0.9, e: c, ei });
+function domeMesh(r, hgt, m, open = true) {
+  const s = new THREE.Mesh(new THREE.SphereGeometry(1, 40, 14, 0, Math.PI * 2, 0, Math.PI / 2), m);
+  s.scale.set(r, hgt, r); s.castShadow = true; m.side = open ? THREE.DoubleSide : m.side;
+  return s;
+}
+function tableLamp({ w, d, h, color, color2 }, s) {
+  const g = new THREE.Group(), base = mat(color2, { r: s.baseR ?? 0.35, m: s.baseM ?? 0 });
+  const R = Math.min(w, d) / 2;
+  if (s.base === 'ceramic') {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(1, 28, 20), base);
+    b.scale.set(R * 0.62, h * 0.24, R * 0.62); b.position.y = h * 0.24; b.castShadow = true; g.add(b);
+    C(g, 0.8, 0.8, h * 0.18, 0, h * 0.46, 0, base, 8);
+  } else if (s.base === 'glassBody') {
+    C(g, R * 0.55, R * 0.6, 3, 0, 0, 0, base, 24);
+  } else {
+    C(g, R * 0.55, R * 0.6, 2, 0, 0, 0, base, 24);
+    C(g, 0.9, 0.9, h * (s.shade === 'dome' ? 0.72 : 0.6), 0, 2, 0, base, 10);
+  }
+  if (s.shade === 'drum') C(g, R * (s.taper ?? 0.85), R, h * 0.4, 0, h * 0.6, 0, glow(color, 0.35), 32);
+  else if (s.shade === 'globe') {
+    const gl = new THREE.Mesh(new THREE.SphereGeometry(R, 32, 24), mat(color, { r: 0.2, e: color, ei: 0.55, o: 0.92 }));
+    gl.position.y = h - R; g.add(gl);
+  } else if (s.shade === 'dome') {
+    const dm = domeMesh(R, h * 0.32, mat(color, { r: 0.35 })); dm.position.y = h * 0.68; g.add(dm);
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(R * 0.92, 32), glow('#fff1d6', 0.9));
+    disc.rotation.x = Math.PI / 2; disc.position.y = h * 0.68 + 0.3; g.add(disc);
+  }
+  return g;
+}
+function floorLampStyled({ w, d, h, color, color2 }, s) {
+  const g = new THREE.Group(), stand = mat(color2, { r: 0.45, m: s.metal ? 0.6 : 0 }), R = Math.min(w, d) / 2;
+  if (s.type === 'tripod') {
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2, leg = new THREE.Mesh(new THREE.CylinderGeometry(1, 1.4, h * 0.72, 8), stand);
+      leg.position.set(Math.sin(a) * R * 0.38, h * 0.35, Math.cos(a) * R * 0.38);
+      leg.rotation.set(Math.cos(a) * 0.28, 0, -Math.sin(a) * 0.28); leg.castShadow = true; g.add(leg);
+    }
+    C(g, R * 0.75, R * 0.9, h * 0.28, 0, h * 0.7, 0, glow(color, 0.35), 32);
+  } else if (s.type === 'reading') {
+    C(g, R * 0.7, R * 0.75, 2.5, 0, 0, 0, stand, 24);
+    C(g, 1, 1, h - 20, 0, 2.5, 0, stand, 10);
+    const arm = B(g, 2, 2, 30, 0, h - 18, 12, stand, 0.6); arm.rotation.x = -0.5;
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(4, 9, 16, 24, 1, true), mat(color, { r: 0.4, m: 0.3, ds: true }));
+    head.position.set(0, h - 18, 26); head.rotation.x = 0.6; head.castShadow = true; g.add(head);
+  } else if (s.type === 'arc') {
+    B(g, 30, 4, 30, -w / 2 + 15, 0, 0, mat(color2, { r: 0.3 }), 1);
+    const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(-w / 2 + 15, 4, 0), new THREE.Vector3(-w / 2 + 15, h + 30, 0), new THREE.Vector3(w / 2 - 20, h - 10, 0));
+    const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 1.2, 8), mat('#b9bcbf', { r: 0.25, m: 0.8 }));
+    tube.castShadow = true; g.add(tube);
+    const dm = domeMesh(20, 16, mat(color, { r: 0.35, m: 0.2 })); dm.position.set(w / 2 - 20, h - 28, 0); g.add(dm);
+  } else { // 直立布罩（ÖKENSAND 類）
+    C(g, R * 0.55, R * 0.6, 2.5, 0, 0, 0, stand, 24);
+    C(g, 1.6, 1.6, h - 34, 0, 2.5, 0, stand, 10);
+    C(g, R * 0.7, R, 34, 0, h - 34, 0, glow(color, 0.4), 32);
+  }
+  return g;
+}
+// 壁燈：背面貼牆（-Z），elev 為底部離地高度
+function wallLamp({ w, d, h, color, color2 }, s) {
+  const g = new THREE.Group(), metal = mat(color2, { r: 0.35, m: 0.5 });
+  if (s.type === 'disc') {
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(w / 2, w / 2, d, 40), mat(color, { r: 0.5 }));
+    disc.rotation.x = Math.PI / 2; disc.position.set(0, h / 2, 0); g.add(disc);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(w / 2 - 1.5, 1, 8, 40), glow('#fff1d6', 1));
+    ring.position.set(0, h / 2, d / 2); g.add(ring);
+  } else if (s.type === 'globe') {
+    B(g, 10, 14, 1.5, 0, h / 2 - 7, -d / 2 + 0.75, metal, 0.5);
+    B(g, 2, 2, d * 0.5, 0, h / 2 - 1, -d / 4, metal, 0.6);
+    const gl = new THREE.Mesh(new THREE.SphereGeometry(Math.min(w, h) / 2 - 1, 28, 20), mat(color, { r: 0.1, e: '#fff1d6', ei: 0.35, o: 0.45 }));
+    gl.position.set(0, h / 2, d / 2 - Math.min(w, h) / 2); g.add(gl);
+  } else { // 擺臂閱讀壁燈
+    B(g, 6, 12, 2, 0, h - 14, -d / 2 + 1, metal, 0.6);
+    B(g, 1.6, 1.6, d - 10, 0, h - 9, 0, metal, 0.5);
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(3.5, 8, 14, 24, 1, true), mat(color, { r: 0.45, ds: true }));
+    head.position.set(0, h - 18, d / 2 - 8); head.castShadow = true; g.add(head);
+  }
+  return g;
+}
+function pendantStyled({ w, d, h, color, color2, elev }, s) {
+  const g = new THREE.Group(), r = w / 2;
+  if (s.shape === 'cone') {
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.25, r, h, 40, 1, true), mat(color, { r: 0.4, ds: true }));
+    c.position.y = h / 2; c.castShadow = true; g.add(c);
+  } else g.add(domeMesh(r, h, mat(color, { r: s.matte ? 0.8 : 0.3, ds: true })));
+  if (s.cap) C(g, r * 0.3, r * 0.34, 5, 0, h - 2, 0, mat(color2, { r: 0.6 }), 24);
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(r * 0.9, 40), glow('#fff4e2', 1));
+  disc.rotation.x = Math.PI / 2; disc.position.y = 0.3; g.add(disc);
+  const cord = Math.max(5, CEIL_H - (elev || 0) - h);
+  C(g, 0.35, 0.35, cord, 0, h, 0, mat('#f2f2f2', { r: 0.5 }), 6).castShadow = false;
+  C(g, 5, 5, 1.5, 0, h + cord - 1.5, 0, mat('#f2f2f2', { r: 0.5 }), 24).castShadow = false;
+  return g;
+}
+
 // 人形：身高參考
 function person({ w, d, h, color }) {
   const g = new THREE.Group(), m = mat(color, { r: 0.7 }), s = h / 170;
@@ -562,23 +827,33 @@ function pendant({ w, d, h, color, elev }) {
 
 // ── 目錄 ────────────────────────────────────────────────
 export const CEIL_H = 278;
-export const CATEGORIES = ['沙發', '客廳', '臥室', '餐廚', '衛浴', '收納', '燈具', '書房・其他'];
+export const CATEGORIES = ['沙發', '單人椅', '客廳', '書桌', '書櫃・層架', '燈具', '臥室', '餐廚', '衛浴', '收納', '書房・其他'];
 
 export const CATALOG = {
-  sofa:          { name: '三人沙發（通用）', cat: '沙發', w: 240, d: 85, h: 80, color: '#e6ddcd', color2: '#6b4f36', build: sofa },
+  sofa:          sofaDef('三人沙發（圓扶手）', 240, 88, 80, '#e6ddcd', '#6b4f36', { arm: 22, armH: 62, legH: 10, seatH: 44, backD: 20, n: 3, round: 9, rollArm: true }),
+  // 布沙發：YKS 擇木深耕 伊達三人座（207×93×106，座高 45）
+  sofa_yks_ida:    sofaDef('布 YKS 伊達三人座 灰', 207, 93, 106, '#8f9497', '#1f1f1f', { arm: 18, armH: 64, legH: 14, seatH: 45, backD: 16, n: 2, backN: 3, backFrame: 0.72, round: 9, rollArm: true, metalLeg: true, splay: true }),
+  sofa_yks_ida_w:  sofaDef('布 YKS 伊達三人座 米白', 207, 93, 106, '#e9e4da', '#1f1f1f', { arm: 18, armH: 64, legH: 14, seatH: 45, backD: 16, n: 2, backN: 3, backFrame: 0.72, round: 9, rollArm: true, metalLeg: true, splay: true }),
+  sofa_curve:    { name: '弧形沙發', cat: '沙發', w: 240, d: 105, h: 75, color: '#e6ddcd', color2: '#6e4b2e', build: curvedSofa },
   // 布沙發
-  sofa_kivik:      sofaDef('布 KIVIK 三人座', 228, 95, 83, '#c9c1b2', '#3a3a3a', { arm: 24, armH: 64, legH: 3, seatH: 45, backD: 22, n: 3, round: 8 }),
-  sofa_vimle:      sofaDef('布 VIMLE 三人座', 241, 98, 83, '#b9a58e', '#3a3a3a', { arm: 15, armH: 68, legH: 6, seatH: 48, backD: 20, n: 3, round: 6 }),
-  sofa_lillesater: sofaDef('布 LILLESÄTER 三人座', 201, 90, 69, '#b8b468', '#3a3a3a', { arm: 8, armH: 60, legH: 2, seatH: 44, backD: 14, n: 1, backCush: false, round: 6 }),
-  sofa_mannarp:    sofaDef('布 MANNARP 三人座', 198, 95, 90, '#ddd2bf', '#6e4b2e', { arm: 10, armH: 62, legH: 16, seatH: 45, backD: 14, n: 3, round: 5 }),
+  sofa_kivik:      sofaDef('布 KIVIK 三人座', 228, 95, 83, '#c9c1b2', '#3a3a3a', { arm: 24, armH: 64, legH: 3, seatH: 45, backD: 22, n: 3, round: 11, rollArm: true }),
+  sofa_vimle:      sofaDef('布 VIMLE 三人座', 241, 98, 83, '#b9a58e', '#3a3a3a', { arm: 15, armH: 68, legH: 6, seatH: 48, backD: 20, n: 3, round: 9 }),
+  sofa_lillesater: sofaDef('布 LILLESÄTER 三人座', 201, 90, 69, '#b8b468', '#3a3a3a', { arm: 8, armH: 60, legH: 2, seatH: 44, backD: 14, n: 1, backCush: false, round: 10 }),
+  sofa_mannarp:    sofaDef('布 MANNARP 三人座', 198, 95, 90, '#ddd2bf', '#6e4b2e', { arm: 10, armH: 62, legH: 16, seatH: 45, backD: 14, n: 3, round: 8, rollArm: true }),
   // 皮沙發
-  sofa_landskrona: sofaDef('皮 LANDSKRONA 三人座', 204, 89, 78, '#9b6a3c', '#6e4b2e', { arm: 12, armH: 64, legH: 16, seatH: 44, backD: 16, n: 3, leather: true, round: 4 }),
-  sofa_stockholm:  sofaDef('皮 STOCKHOLM 三人座', 211, 88, 80, '#c99a66', '#5a3d28', { arm: 15, armH: 72, legH: 14, seatH: 43, backD: 16, n: 3, leather: true, round: 5 }),
-  sofa_klippan:    sofaDef('皮 KLIPPAN 雙人座', 177, 88, 66, '#2a2a2a', '#2a2a2a', { arm: 20, armH: 66, legH: 3, seatH: 43, backD: 22, n: 1, backCush: false, leather: true, round: 7 }),
+  sofa_landskrona: sofaDef('皮 LANDSKRONA 三人座', 204, 89, 78, '#9b6a3c', '#6e4b2e', { arm: 12, armH: 64, legH: 16, seatH: 44, backD: 16, n: 3, leather: true, round: 6 }),
+  sofa_stockholm:  sofaDef('皮 STOCKHOLM 三人座', 211, 88, 80, '#c99a66', '#5a3d28', { arm: 15, armH: 72, legH: 14, seatH: 43, backD: 16, n: 3, leather: true, round: 7 }),
+  sofa_klippan:    sofaDef('皮 KLIPPAN 雙人座', 177, 88, 66, '#2a2a2a', '#2a2a2a', { arm: 20, armH: 66, legH: 3, seatH: 43, backD: 22, n: 1, backCush: false, leather: true, round: 9, rollArm: true }),
   sofa_hemlingby:  sofaDef('皮 HEMLINGBY 雙人座', 145, 72, 72, '#2a2a2a', '#333333', { arm: 8, armH: 61, legH: 14.5, seatH: 42, backD: 12, n: 2, backCush: false, leather: true, metalLeg: true, round: 3 }),
-  sofa_vimle_l:    sofaDef('皮 VIMLE 三人座', 241, 98, 80, '#2b2b2b', '#2b2b2b', { arm: 15, armH: 65, legH: 4, seatH: 45, backD: 20, n: 3, leather: true, round: 6 }),
-  sofa_kivik_l:    sofaDef('皮 KIVIK 三人座', 227, 95, 83, '#2d2d2d', '#2b2b2b', { arm: 24, armH: 64, legH: 3, seatH: 45, backD: 22, n: 3, leather: true, round: 8 }),
-  armchair:      { name: '單人沙發', cat: '沙發', w: 85, d: 82, h: 80, color: '#cdbfa8', color2: '#6b4f36', build: sofa },
+  sofa_vimle_l:    sofaDef('皮 VIMLE 三人座', 241, 98, 80, '#2b2b2b', '#2b2b2b', { arm: 15, armH: 65, legH: 4, seatH: 45, backD: 20, n: 3, leather: true, round: 9 }),
+  sofa_kivik_l:    sofaDef('皮 KIVIK 三人座', 227, 95, 83, '#2d2d2d', '#2b2b2b', { arm: 24, armH: 64, legH: 3, seatH: 45, backD: 22, n: 3, leather: true, round: 11, rollArm: true }),
+  // 單人椅（尺寸參考 IKEA 台灣官網）
+  armchair:          { name: 'STOCKHOLM 2025 扶手椅', cat: '單人椅', w: 76, d: 72, h: 68, color: '#cfcac2', color2: '#f2f2f0', build: o => roundChair(o, { seatH: 40, arc: 4.2 }) },
+  armchair_strandmon:{ name: 'STRANDMON 高背扶手椅', cat: '單人椅', w: 82, d: 96, h: 101, color: '#5b6f8a', color2: '#5a3d28', build: wingChair },
+  armchair_poang:    { name: 'POÄNG 扶手椅', cat: '單人椅', w: 68, d: 82, h: 100, color: '#8a9aa6', color2: '#d9b98a', build: bentChair },
+  armchair_dyvlinge: { name: 'DYVLINGE 旋轉休閒椅', cat: '單人椅', w: 63, d: 63, h: 78, color: '#e3dccd', color2: '#3a3a3a', build: o => roundChair(o, { swivel: true, seatH: 42, arc: 4.8 }) },
+  armchair_lillesater:{ name: 'LILLESÄTER 旋轉休閒椅', cat: '單人椅', w: 70, d: 70, h: 75, color: '#2f3e5c', color2: '#2b2b2b', build: o => roundChair(o, { swivel: true, seatH: 42, arc: 5.0 }) },
+  armchair_box:      { ...sofaDef('方正單人沙發', 85, 82, 80, '#cdbfa8', '#6b4f36', { arm: 16, armH: 62, legH: 10, seatH: 44, backD: 18, n: 1, round: 8 }), cat: '單人椅' },
   coffee_table:  { name: '茶几', cat: '客廳', w: 100, d: 50, h: 40, color: '#c49a6c', build: coffeeTable },
   side_table:    { name: '邊几', cat: '客廳', w: 45, d: 45, h: 50, color: '#c49a6c', build: sideTable },
   tv_floating:   { name: '懸空電視櫃', cat: '客廳', w: 280, d: 40, h: 40, elev: 25, color: '#bdbab4', color2: '#a8835e', build: tvFloating },
@@ -586,9 +861,24 @@ export const CATALOG = {
   tv:            { name: '電視 65吋', cat: '客廳', w: 145, d: 6, h: 84, color: '#1d1d1f', build: tv },
   rug:           { name: '地毯', cat: '客廳', w: 200, d: 140, h: 1, color: '#e9e2d6', build: rug },
   rug_round:     { name: '圓地毯', cat: '客廳', w: 120, d: 120, h: 1, color: '#c8b59a', build: rugRound },
-  pendant:       { name: '吊燈', cat: '燈具', w: 50, d: 50, h: 15, elev: 150, color: '#e8692a', build: pendant },
+  pendant:       { name: '吊燈（橘色圓罩）', cat: '燈具', w: 50, d: 50, h: 15, elev: 150, color: '#e8692a', build: pendant },
+  pendant_vaxjo: { name: 'VÄXJÖ 吊燈', cat: '燈具', w: 38, d: 38, h: 20, elev: 160, color: '#d9cdb7', color2: '#d9cdb7', build: o => pendantStyled(o, { matte: true }) },
+  pendant_bunkeflo:{ name: 'BUNKEFLO 吊燈', cat: '燈具', w: 36, d: 36, h: 18, elev: 160, color: '#f2f2f0', color2: '#d7b98a', build: o => pendantStyled(o, { matte: true, cap: true }) },
+  pendant_cone:  { name: '錐形吊燈', cat: '燈具', w: 30, d: 30, h: 28, elev: 150, color: '#2b2b2b', color2: '#c9a24a', build: o => pendantStyled(o, { shape: 'cone', cap: true }) },
   track_light:   { name: '軌道燈', cat: '燈具', w: 240, d: 6, h: 14, elev: CEIL_H - 14, color: '#f5f5f3', build: trackLight },
-  floor_lamp:    { name: '立燈', cat: '燈具', w: 40, d: 40, h: 160, color: '#f3ead8', build: floorLamp },
+  floor_lamp:    { name: '立燈（布罩）', cat: '燈具', w: 40, d: 40, h: 160, color: '#f3ead8', build: floorLamp },
+  floor_okensand:{ name: 'ÖKENSAND 落地燈', cat: '燈具', w: 40, d: 40, h: 150, color: '#f4efe4', color2: '#d7b98a', build: o => floorLampStyled(o, {}) },
+  floor_ranarp:  { name: 'RANARP 落地閱讀燈', cat: '燈具', w: 40, d: 40, h: 153, color: '#2b2b2b', color2: '#2b2b2b', build: o => floorLampStyled(o, { type: 'reading', metal: true }) },
+  floor_lauters: { name: 'LAUTERS 三腳落地燈', cat: '燈具', w: 50, d: 50, h: 145, color: '#f4efe4', color2: '#9b7653', build: o => floorLampStyled(o, { type: 'tripod' }) },
+  floor_arc:     { name: '弧形立燈', cat: '燈具', w: 160, d: 35, h: 200, color: '#2b2b2b', color2: '#e8e6e1', build: o => floorLampStyled(o, { type: 'arc' }) },
+  table_dejsa:   { name: 'DEJSA 桌燈（玻璃球）', cat: '燈具', w: 28, d: 28, h: 41, color: '#f6f1e6', color2: '#d9cdb7', build: o => tableLamp(o, { base: 'glassBody', shade: 'globe' }) },
+  table_blasverk:{ name: 'BLÅSVERK 桌燈', cat: '燈具', w: 26, d: 26, h: 36, color: '#e8dfcf', color2: '#e8dfcf', build: o => tableLamp(o, { base: 'ceramic', shade: 'drum' }) },
+  table_tarnaby: { name: 'TÄRNABY 蘑菇桌燈', cat: '燈具', w: 18, d: 18, h: 25, color: '#2f2f2f', color2: '#2f2f2f', build: o => tableLamp(o, { shade: 'dome' }) },
+  table_arstid:  { name: 'ÅRSTID 桌燈', cat: '燈具', w: 22, d: 22, h: 55, color: '#f4efe4', color2: '#c9a24a', build: o => tableLamp(o, { shade: 'drum', taper: 1, baseM: 0.8, baseR: 0.3 }) },
+  table_blidvader:{ name: 'BLIDVÄDER 桌燈', cat: '燈具', w: 30, d: 30, h: 50, color: '#e3d8c4', color2: '#f1ece2', build: o => tableLamp(o, { base: 'ceramic', shade: 'drum' }) },
+  wall_nymane:   { name: 'NYMÅNE 擺臂壁燈', cat: '燈具', w: 15, d: 40, h: 30, elev: 120, color: '#f2f2f0', color2: '#f2f2f0', build: o => wallLamp(o, {}) },
+  wall_varmblixt:{ name: 'VARMBLIXT 圓形壁燈', cat: '燈具', w: 30, d: 6, h: 30, elev: 160, color: '#f2f2f0', color2: '#f2f2f0', build: o => wallLamp(o, { type: 'disc' }) },
+  wall_solklint: { name: 'SOLKLINT 玻璃壁燈', cat: '燈具', w: 18, d: 22, h: 20, elev: 170, color: '#e8eef0', color2: '#c9a24a', build: o => wallLamp(o, { type: 'globe' }) },
   bed_queen:     { name: '雙人床 6尺', cat: '臥室', w: 182, d: 190, h: 100, color: '#c49a6c', color2: '#9a8471', build: bed },
   bed_double:    { name: '雙人床 5尺', cat: '臥室', w: 152, d: 188, h: 95, color: '#c49a6c', color2: '#b7a48f', build: bed },
   bed_single:    { name: '單人床', cat: '臥室', w: 105, d: 188, h: 90, color: '#c49a6c', color2: '#e3d6c3', build: bed },
@@ -612,9 +902,26 @@ export const CATALOG = {
   cabinet_tall:  { name: '高櫃', cat: '收納', w: 100, d: 45, h: 215, color: '#ece7df', build: o => cabinet(o, 45) },
   shoe_cabinet:  { name: '鞋櫃', cat: '收納', w: 120, d: 40, h: 110, color: '#ece7df', build: o => cabinet(o, 45) },
   shelf_thin:    { name: '薄櫃', cat: '收納', w: 100, d: 20, h: 232, color: '#ece7df', build: o => cabinet(o, 45) },
-  bookshelf:     { name: '書櫃', cat: '收納', w: 80, d: 30, h: 180, color: '#c49a6c', build: bookshelf },
-  desk:          { name: '書桌', cat: '書房・其他', w: 120, d: 60, h: 75, color: '#c49a6c', build: desk },
-  office_chair:  { name: '辦公椅', cat: '書房・其他', w: 60, d: 60, h: 95, color: '#45474b', build: officeChair },
+  bookshelf:     { name: '開放書櫃', cat: '書櫃・層架', w: 80, d: 30, h: 180, color: '#c49a6c', build: bookshelf },
+  bookshelf_low: { name: '矮書櫃', cat: '書櫃・層架', w: 120, d: 30, h: 80, color: '#c49a6c', build: bookshelf },
+  billy:         { name: 'IKEA BILLY 書櫃', cat: '書櫃・層架', w: 80, d: 28, h: 202, color: '#f3f3f1', build: bookshelf },
+  kallax_4x4:    { name: 'IKEA KALLAX 4×4 方格櫃', cat: '書櫃・層架', w: 147, d: 39, h: 147, color: '#f3f3f1', color2: '#cfc6b6', build: kallax },
+  kallax_2x4:    { name: 'IKEA KALLAX 2×4 方格櫃', cat: '書櫃・層架', w: 77, d: 39, h: 147, color: '#f3f3f1', color2: '#cfc6b6', build: kallax },
+  kallax_4x1:    { name: 'IKEA KALLAX 4×1 矮櫃', cat: '書櫃・層架', w: 147, d: 39, h: 42, color: '#c9a77d', color2: '#e9e2d6', build: kallax },
+  ladder_shelf:  { name: '梯形書架', cat: '書櫃・層架', w: 60, d: 35, h: 180, color: '#b08d68', build: ladderShelf },
+  sus_s:         { name: 'MUJI SUS 層架 小', cat: '書櫃・層架', w: 58, d: 41, h: 83, color: '#d3d4d2', color2: '#d3d4d2', build: sus },
+  sus_m:         { name: 'MUJI SUS 層架 中', cat: '書櫃・層架', w: 58, d: 41, h: 120, color: '#d3d4d2', color2: '#d3d4d2', build: sus },
+  sus_l:         { name: 'MUJI SUS 層架 大', cat: '書櫃・層架', w: 58, d: 41, h: 175.5, color: '#d3d4d2', color2: '#d3d4d2', build: sus },
+  sus_wm:        { name: 'MUJI SUS 層架 寬／中', cat: '書櫃・層架', w: 86, d: 41, h: 120, color: '#4a4b4d', color2: '#4a4b4d', build: sus },
+  sus_wl:        { name: 'MUJI SUS 層架 寬／大', cat: '書櫃・層架', w: 86, d: 41, h: 175.5, color: '#4a4b4d', color2: '#4a4b4d', build: sus },
+  desk:          { name: '書桌', cat: '書桌', w: 120, d: 60, h: 75, color: '#c49a6c', build: desk },
+  desk_trotten:  { name: 'IKEA TROTTEN 書桌', cat: '書桌', w: 120, d: 70, h: 75, color: '#d8c3a5', color2: '#f2f2f0', build: o => standDesk(o, { lift: false }) },
+  desk_trotten_e:{ name: 'IKEA TROTTEN 電動升降桌', cat: '書桌', w: 160, d: 80, h: 75, color: '#f2f2f0', color2: '#f2f2f0', build: standDesk },
+  desk_mittzon:  { name: 'IKEA MITTZON 電動升降桌', cat: '書桌', w: 140, d: 80, h: 75, color: '#f2f2f0', color2: '#f2f2f0', build: standDesk },
+  desk_mittzon_s:{ name: 'IKEA MITTZON 升降桌 樺木', cat: '書桌', w: 120, d: 60, h: 75, color: '#d9bf95', color2: '#f2f2f0', build: standDesk },
+  desk_gladhojden:{ name: 'IKEA GLADHÖJDEN 升降桌', cat: '書桌', w: 100, d: 60, h: 75, color: '#f2f2f0', color2: '#f2f2f0', build: standDesk },
+  desk_idasen:   { name: 'IKEA IDÅSEN 電動升降桌', cat: '書桌', w: 160, d: 80, h: 75, color: '#3b3b3b', color2: '#2b2b2b', build: standDesk },
+  office_chair:  { name: '辦公椅', cat: '書桌', w: 60, d: 60, h: 95, color: '#45474b', build: officeChair },
   person:        { name: '人形（身高參考）', cat: '書房・其他', w: 50, d: 28, h: 170, color: '#9aa7b4', build: person },
   plant:         { name: '盆栽', cat: '書房・其他', w: 45, d: 45, h: 110, color: '#5f8a4e', build: plant },
 };

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import * as P from './plan.js?v=6';
-import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=6';
+import * as P from './plan.js?v=7';
+import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=7';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -444,6 +444,7 @@ function select(id) {
   $('#pRot').value = Math.round(it.rot); $('#pRotVal').textContent = Math.round(it.rot) + '°';
   $('#pColor').value = it.color || def.color;
   $('#pColor2Row').hidden = !def.color2;
+  $('#pSw2Row').hidden = !def.color2;
   const same = Object.entries(CATALOG).filter(([, d]) => d.cat === def.cat);
   const sel = $('#pStyle');
   sel.innerHTML = same.map(([k, d]) => `<option value="${k}">${d.name}　${d.w}×${d.d}</option>`).join('');
@@ -461,6 +462,21 @@ function updateSel(fn, rebuild = false) {
 }
 const normRot = r => ((Math.round(r) % 360) + 360) % 360;
 
+// 常用色票：點一下套用到主色／配色
+const SWATCHES = [
+  ['#efe9df', '米白'], ['#e3e1dc', '灰白'], ['#c9c9c6', '淺灰'], ['#8f9497', '灰'], ['#4a4b4d', '深灰'], ['#232323', '黑'],
+  ['#d6c7ad', '燕麥'], ['#b9946b', '駝色'], ['#c9a77d', '橡木'], ['#6e4b2e', '胡桃木'], ['#9b6a3c', '焦糖皮'],
+  ['#8a9a7b', '鼠尾草綠'], ['#7d8a96', '霧藍'], ['#b55d4c', '磚紅'], ['#e8692a', '橘'], ['#c9a24a', '黃銅'],
+];
+for (const [box, key, input] of [['#pSw1', 'color', '#pColor'], ['#pSw2', 'color2', '#pColor2']]) {
+  const el = $(box);
+  for (const [c, n] of SWATCHES) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'sw'; b.style.background = c; b.title = n; b.setAttribute('aria-label', n);
+    b.onclick = () => { updateSel(it => { it[key] = c; }, true); $(input).value = c; commit(); };
+    el.appendChild(b);
+  }
+}
 $('#pStyle').addEventListener('change', e => {
   const t = e.target.value, def = CATALOG[t];
   if (!def) return;

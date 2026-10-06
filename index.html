@@ -6,7 +6,7 @@
 <title>無印風公寓 3D 擺設</title>
 <meta name="description" content="依平面圖建立的 3D 户型，可自由擺放、移動、旋轉家具。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='3' fill='%23f3f0ea' stroke='%2356575a' stroke-width='3'/%3E%3Cpath d='M16 3v14h13M3 19h8' stroke='%2356575a' stroke-width='3' fill='none'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=6">
+<link rel="stylesheet" href="css/style.css?v=7">
 <script type="importmap">
 { "imports": {
   "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
@@ -130,6 +130,12 @@
       <span id="pColor2Row" class="c2"><span class="lbl">配色</span><input id="pColor2" type="color"></span>
       <button id="pResetColor" class="link">預設</button>
     </div>
+    <div class="sw-block">
+      <span class="lbl">主色</span><div class="swatches" id="pSw1"></div>
+    </div>
+    <div class="sw-block" id="pSw2Row">
+      <span class="lbl">配色</span><div class="swatches" id="pSw2"></div>
+    </div>
     <div class="actions">
       <button id="pRotL" class="btn" title="逆時針 90° (Shift+R)">⟲ 90°</button>
       <button id="pRotR" class="btn" title="順時針 90° (R)">⟳ 90°</button>
@@ -196,8 +202,14 @@
     <article data-g="furn">
       <h4>新增</h4>
       <p>左側家具庫可依分類或搜尋找家具，點一下會放在畫面中央，或直接拖曳到想放的位置。</p>
-      <h4>沙發款式</h4>
-      <p>家具庫的 <b>「沙發」</b> 分類有布沙發（KIVIK、VIMLE、LILLESÄTER、MANNARP）與皮沙發（LANDSKRONA、STOCKHOLM、KLIPPAN、HEMLINGBY、VIMLE、KIVIK），寬深高依 IKEA 官網尺寸。點選沙發後，屬性面板的 <b>「款式」</b> 下拉選單可以直接換成別款，位置與方向不變。</p>
+      <h4>沙發與單人椅</h4>
+      <p><b>「沙發」</b> 分類：圓扶手三人沙發、弧形沙發、YKS 伊達三人座（灰／米白，207×93×106）、IKEA 布沙發（KIVIK、VIMLE、LILLESÄTER、MANNARP）與皮沙發（LANDSKRONA、STOCKHOLM、KLIPPAN、HEMLINGBY、VIMLE、KIVIK）。<b>「單人椅」</b> 分類：STOCKHOLM 2025 圓扶手椅、STRANDMON 高背椅、POÄNG 彎木椅、DYVLINGE／LILLESÄTER 旋轉椅。寬深高依官網標示。</p>
+      <h4>換款式</h4>
+      <p>點選任何家具，屬性面板的 <b>「款式」</b> 下拉可換成同分類的別款，位置與方向不變，尺寸自動改成新款。</p>
+      <h4>書桌與層架</h4>
+      <p><b>「書桌」</b> 分類有 IKEA TROTTEN、MITTZON、GLADHÖJDEN、IDÅSEN 升降桌，改「高」就是調桌面高度（站立約 105–115cm），適合放在沙發背後。<b>「書櫃・層架」</b> 分類有 BILLY、KALLAX、梯形書架，以及 MUJI SUS 層架（小 83／中 120／大 175.5cm，寬 58 或 86cm），層數會依高度自動調整。</p>
+      <h4>燈飾</h4>
+      <p><b>「燈具」</b> 分類有吊燈、軌道燈、立燈（ÖKENSAND、RANARP、LAUTERS、弧形）、桌燈（DEJSA、BLÅSVERK、TÄRNABY、ÅRSTID、BLIDVÄDER）、壁燈（NYMÅNE、VARMBLIXT、SOLKLINT）。桌燈放到桌上請把「離地」設成桌面高度；壁燈預設已掛在牆面高度。</p>
       <h4>尺寸參考</h4>
       <p>畫面中的 <b>人形</b>（書房・其他分類）身高 170cm，可以拖到家具旁邊比對高度；改「高」就能換成家人的身高。</p>
       <h4>衣櫃</h4>
@@ -214,7 +226,7 @@
         <li><b>寬／深／高</b>：輸入實際尺寸（cm）。</li>
         <li><b>離地</b>：家具底部離地板的高度，例如懸空電視櫃、牆上的電視、吊燈。</li>
         <li><b>旋轉</b>：拖曳滑桿，或按 ⟲ ⟳ 轉 90°。</li>
-        <li><b>顏色／配色</b>：主色與布料、床單等第二色；「預設」可還原。</li>
+        <li><b>顏色／配色</b>：主色（布面、燈罩、桌面）與配色（腳、框架、底座）。可用色盤自由選色，或點下方 <b>色票</b>（米白、灰、橡木、胡桃木…）一鍵套用；「預設」可還原。</li>
         <li><b>複製／刪除</b>：在面板下方。</li>
       </ul>
       <p class="tip">選取時地上的橘色箭頭代表家具「正面」朝向。</p>
@@ -308,6 +320,6 @@
 <div id="toast" class="toast" role="status"></div>
 <div class="loading" id="loading"><span></span>載入 3D 場景…</div>
 
-<script type="module" src="js/main.js?v=6"></script>
+<script type="module" src="js/main.js?v=7"></script>
 </body>
 </html>
