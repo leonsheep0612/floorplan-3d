@@ -361,8 +361,25 @@ function desk({ w, d, h, color }) {
 
 function island(o) { return counter(o, false); }
 
+function pendant({ w, d, h, color, elev }) {
+  const g = new THREE.Group(), r = w / 2;
+  const shell = new THREE.Mesh(new THREE.SphereGeometry(1, 48, 16, 0, Math.PI * 2, 0, Math.PI / 2), mat(color, { r: 0.22, m: 0.05, ds: true }));
+  shell.scale.set(r, h, d / 2); shell.castShadow = true; g.add(shell);
+  const glow = new THREE.Mesh(new THREE.CircleGeometry(1, 48), mat('#fff6e6', { r: 0.9, e: '#ffe4b8', ei: 1.1 }));
+  glow.rotation.x = Math.PI / 2; glow.scale.set(r * 0.94, d / 2 * 0.94, 1); glow.position.y = 0.4; g.add(glow);
+  const top = h;
+  const cord = Math.max(5, (CEIL_H - (elev || 0)) - top);
+  C(g, 0.35, 0.35, cord, 0, top, 0, mat('#f2f2f2', { r: 0.5 }), 6).castShadow = false;
+  C(g, 5, 5, 1.5, 0, top + cord - 1.5, 0, mat('#f2f2f2', { r: 0.5 }), 24).castShadow = false;
+  const light = new THREE.PointLight('#ffd7a3', 0.9, 260, 0);
+  light.position.y = -6; g.add(light);
+  return g;
+}
+
+
 // ── 目錄 ────────────────────────────────────────────────
-export const CATEGORIES = ['客廳', '臥室', '餐廚', '衛浴', '收納', '書房・其他'];
+export const CEIL_H = 278;
+export const CATEGORIES = ['客廳', '臥室', '餐廚', '衛浴', '收納', '燈具', '書房・其他'];
 
 export const CATALOG = {
   sofa:          { name: '三人沙發', cat: '客廳', w: 240, d: 85, h: 80, color: '#e6ddcd', color2: '#6b4f36', build: sofa },
@@ -373,7 +390,8 @@ export const CATALOG = {
   tv:            { name: '電視 65吋', cat: '客廳', w: 145, d: 6, h: 84, color: '#1d1d1f', build: tv },
   rug:           { name: '地毯', cat: '客廳', w: 200, d: 140, h: 1, color: '#e9e2d6', build: rug },
   rug_round:     { name: '圓地毯', cat: '客廳', w: 120, d: 120, h: 1, color: '#c8b59a', build: rugRound },
-  floor_lamp:    { name: '立燈', cat: '客廳', w: 40, d: 40, h: 160, color: '#f3ead8', build: floorLamp },
+  pendant:       { name: '吊燈', cat: '燈具', w: 50, d: 50, h: 15, elev: 150, color: '#e8692a', build: pendant },
+  floor_lamp:    { name: '立燈', cat: '燈具', w: 40, d: 40, h: 160, color: '#f3ead8', build: floorLamp },
   bed_queen:     { name: '雙人床 6尺', cat: '臥室', w: 182, d: 190, h: 100, color: '#c49a6c', color2: '#9a8471', build: bed },
   bed_double:    { name: '雙人床 5尺', cat: '臥室', w: 152, d: 188, h: 95, color: '#c49a6c', color2: '#b7a48f', build: bed },
   bed_single:    { name: '單人床', cat: '臥室', w: 105, d: 188, h: 90, color: '#c49a6c', color2: '#e3d6c3', build: bed },
@@ -403,7 +421,7 @@ export const CATALOG = {
 
 export function buildFurniture(it) {
   const def = CATALOG[it.type];
-  const o = { w: it.w, d: it.d, h: it.h, color: it.color || def.color, color2: it.color2 || def.color2 || '#888888' };
+  const o = { w: it.w, d: it.d, h: it.h, elev: it.elev || 0, color: it.color || def.color, color2: it.color2 || def.color2 || '#888888' };
   const g = def.build(o);
   g.traverse(m => { if (m.isMesh) m.userData.fid = it.id; });
   return g;

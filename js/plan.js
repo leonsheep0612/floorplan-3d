@@ -80,6 +80,7 @@ export const DEFAULT_LAYOUT = [
   { t: 'shoe_cabinet', c: [365, 746], w: 150, d: 40, h: 215, name: '玄關櫃' },
   { t: 'shelf_thin', c: [646, 645], rot: -90, w: 260, name: '展示薄櫃' },
   { t: 'dining_table', c: [522, 650] },
+  { t: 'pendant', c: [522, 650], name: '餐廳吊燈' },
   { t: 'chair', c: [497, 612] },
   { t: 'chair', c: [547, 612] },
   { t: 'chair', c: [497, 688], rot: 180 },

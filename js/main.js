@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import * as P from './plan.js';
-import { CATALOG, CATEGORIES, buildFurniture, mat } from './furniture.js';
+import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -263,7 +263,7 @@ const newId = () => 'f' + (uid++).toString(36) + Date.now().toString(36).slice(-
 
 function makeItem(type, x, z, extra = {}) {
   const def = CATALOG[type];
-  return { id: newId(), type, x, z, w: def.w, d: def.d, h: def.h, rot: 0, elev: 0, color: def.color, color2: def.color2 || null, name: def.name, ...extra };
+  return { id: newId(), type, x, z, w: def.w, d: def.d, h: def.h, rot: 0, elev: def.elev || 0, color: def.color, color2: def.color2 || null, name: def.name, ...extra };
 }
 function defaultLayout() {
   return P.DEFAULT_LAYOUT.map(f => {
@@ -335,7 +335,7 @@ function commit(save = true) {
   updateUndo();
 }
 function persist() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 1, items })); } catch { /* 私密模式等 */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 2, items })); } catch { /* 私密模式等 */ }
 }
 function restore(i) {
   hIndex = i;
@@ -383,7 +383,7 @@ for (const [id, key, min] of [['#pW', 'w', 5], ['#pD', 'd', 1], ['#pH', 'h', 1]]
     e.target.value = v; updateSel(it => it[key] = v, true); commit();
   });
 }
-$('#pElev').addEventListener('change', e => { const v = Math.max(0, Math.min(250, +e.target.value || 0)); e.target.value = v; updateSel(it => it.elev = v); commit(); });
+$('#pElev').addEventListener('change', e => { const v = Math.max(0, Math.min(250, +e.target.value || 0)); e.target.value = v; updateSel(it => it.elev = v, true); commit(); });
 $('#pRot').addEventListener('input', e => { updateSel(it => it.rot = normRot(+e.target.value)); $('#pRotVal').textContent = e.target.value + '°'; });
 $('#pRot').addEventListener('change', () => commit());
 $('#pColor').addEventListener('input', e => updateSel(it => it.color = e.target.value, true));
@@ -527,7 +527,7 @@ function renderThumbs() {
   const c = new THREE.PerspectiveCamera(30, 1, 1, 5000);
   const out = {};
   for (const [type, def] of Object.entries(CATALOG)) {
-    const g = buildFurniture({ id: '_', type, w: def.w, d: def.d, h: def.h });
+    const g = buildFurniture({ id: '_', type, w: def.w, d: def.d, h: def.h, elev: def.elev ? CEIL_H - def.h - 30 : 0 });
     sc.add(g);
     const box = new THREE.Box3().setFromObject(g), size = box.getSize(new THREE.Vector3()), ctr = box.getCenter(new THREE.Vector3());
     const rad = size.length() / 2;
@@ -867,7 +867,11 @@ async function init() {
   const m = location.hash.match(/#L=([\w-]+)/);
   if (m) { try { list = await decodeLayout(m[1]); fromShare = true; } catch { toast('分享連結無法讀取，改用本機配置'); } }
   if (!list) {
-    try { const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); if (s && Array.isArray(s.items)) list = s.items.map(sanitize).filter(Boolean); } catch { /* 忽略 */ }
+    try { const s = JSON.parse(localStorage.getItem(STORE_KEY) || 'null'); if (s && Array.isArray(s.items)) {
+      list = s.items.map(sanitize).filter(Boolean);
+      // v2 新增餐廳吊燈：舊存檔自動補上
+      if ((s.v || 1) < 2 && !list.some(it => it.type === 'pendant')) list.push(...defaultLayout().filter(it => it.type === 'pendant'));
+    } } catch { /* 忽略 */ }
   }
   setItems(list || defaultLayout());
   commit(!fromShare ? true : false);
