@@ -65,14 +65,44 @@ function sofa({ w, d, h, color, color2 }) {
   return g;
 }
 
+
+// 實木框架沙發：木作扶手板＋木腳＋座底橫撐，坐墊與靠墊放在框架上（主色＝布墊、配色＝木色）
+function woodFrameSofa({ w, d, h, color, color2 }, s = {}) {
+  const g = new THREE.Group(), wood = mat(color2, { r: 0.5 }), fab = mat(color, { r: 0.95 }), cush = mat(shade(color, 0.06), { r: 0.95 });
+  const armW = s.wideArm ? 16 : 5, armH = s.armH ?? 60, legH = 14, seatY = s.seatH ?? 43;
+  for (const sx of [-1, 1]) {
+    const x = sx * (w / 2 - armW / 2);
+    if (s.wideArm) {
+      B(g, armW, armH - 4, d - 6, x, 0, 0, wood, 1.5);          // 寬板扶手（實木箱型）
+      B(g, armW + 2, 4, d - 2, x, armH - 4, 0, wood, 1.5);       // 扶手面板
+    } else {
+      for (const sz of [-1, 1]) B(g, 4.5, armH, 4.5, x, 0, sz * (d / 2 - 4), wood, 1);  // 前後立柱
+      B(g, 5, 4, d - 2, x, armH - 4, 0, wood, 1.5);              // 扶手橫木
+      B(g, 3, 3, d - 10, x, 20, 0, wood, 0.8);                   // 下橫撐
+    }
+  }
+  const inner = w - 2 * armW;
+  B(g, inner, 5, d - 8, 0, legH, -1, wood, 1);                   // 座底框
+  if (!s.wideArm) for (const sx of [-1, 1]) for (const sz of [-1, 1]) B(g, 4, legH, 4, sx * (inner / 2 - 6), 0, sz * (d / 2 - 8), wood, 0.8);
+  B(g, inner - 2, 4, 4, 0, h - 26, -d / 2 + 4, wood, 1);          // 靠背橫木
+  const n = s.n ?? 3, cw = (inner - 2) / n, cushT = seatY - legH - 5;
+  for (let i = 0; i < n; i++) {
+    const x = -inner / 2 + 1 + cw * (i + 0.5);
+    B(g, cw - 1.2, cushT, d - 22, x, legH + 5, 6, cush, 5);
+    const bc = B(g, cw - 2, h - seatY - 4, 16, x, seatY - 2, -d / 2 + 12, fab, 6);
+    bc.rotation.x = -0.14;
+  }
+  return g;
+}
+
 // 可調款式的沙發（尺寸參考 IKEA 台灣官網）
 // s: arm 扶手寬、armH 扶手高、legH 腳高、seatH 座高、backD 椅背厚、n 座墊數、backCush 是否有背墊、leather、metalLeg、round
 function sofaStyled(o, s) {
   const { w, d, h, color, color2 } = o;
   const g = new THREE.Group();
   const rr = s.leather ? 0.42 : 0.95;
-  const fab = mat(color, { r: rr }), cush = mat(shade(color, s.leather ? 0.05 : 0.08), { r: rr - 0.04 });
-  const leg = mat(color2, { r: 0.45, m: s.metalLeg ? 0.75 : 0 });
+  const fab = mat(color, { r: rr }), cush = mat(s.twoTone ? color2 : shade(color, s.leather ? 0.05 : 0.08), { r: rr - 0.04 });
+  const leg = mat(s.twoTone ? '#8a6440' : color2, { r: 0.45, m: s.metalLeg ? 0.75 : 0 });
   const legH = s.legH ?? 10, seatH = s.seatH ?? 44, round = s.round ?? 5;
   const arm = Math.min(s.arm ?? 18, w * 0.15), armH = Math.min(s.armH ?? 62, h), backD = Math.min(s.backD ?? 20, d * 0.3);
   const cushT = 13, baseH = Math.max(6, seatH - legH - cushT);
@@ -107,8 +137,11 @@ function sofaStyled(o, s) {
     const bn = s.backN ?? n, bw = inner / bn;
     for (let i = 0; i < bn; i++) {
       const x = -inner / 2 + bw * (i + 0.5);
-      const bc = B(g, bw - 3, Math.max(10, h - seatH - 2), 15, x, seatH - 1, -d / 2 + backD + (s.backFrame ? -2 : 6), cush, 6);
+      const bh = s.headrest ? Math.max(10, h - seatH - 24) : Math.max(10, h - seatH - 2);
+      const bc = B(g, bw - 3, bh, 15, x, seatH - 1, -d / 2 + backD + (s.backFrame ? -2 : 6), cush, 6);
       bc.rotation.x = -0.12;
+      // 可調頭枕：靠背上方獨立小枕
+      if (s.headrest) B(g, bw - 8, 20, 11, x, h - 21, -d / 2 + backD / 2 + 3, fab, 6);
     }
   }
   return g;
@@ -1152,6 +1185,20 @@ export const CATALOG = {
   // 布沙發：YKS 擇木深耕 伊達三人座（207×93×106，座高 45）
   sofa_yks_ida:    sofaDef('布 YKS 伊達三人座 灰', 207, 93, 106, '#8f9497', '#1f1f1f', { arm: 18, armH: 64, legH: 14, seatH: 45, backD: 16, n: 2, backN: 3, backFrame: 0.72, round: 9, rollArm: true, metalLeg: true, splay: true }),
   sofa_yks_ida_w:  sofaDef('布 YKS 伊達三人座 米白', 207, 93, 106, '#e9e4da', '#1f1f1f', { arm: 18, armH: 64, legH: 14, seatH: 45, backD: 16, n: 2, backN: 3, backFrame: 0.72, round: 9, rollArm: true, metalLeg: true, splay: true }),
+  // hoi! 好好生活 三人沙發（2.1M 以上；尺寸取自商品頁：寬×深×高）
+  sofa_hoi_bs103:  sofaDef('布 Linsy 舒心簡約 BS103 218', 218, 93, 90, '#eeeae2', '#3a3a3a', { arm: 20, armH: 62, legH: 6, seatH: 44, backD: 18, n: 3, round: 10, rollArm: true }),
+  sofa_hoi_ps199:  sofaDef('皮 Linsy 現代高背牛皮 PS199 220', 220, 98, 93, '#cfcbc4', '#2b2b2b', { arm: 14, armH: 62, legH: 12, seatH: 44, backD: 16, n: 3, leather: true, metalLeg: true, round: 8 }),
+  sofa_hoi_bubble: sofaDef('布 hoi! 泡泡 219', 219, 104, 96, '#efebe3', '#d9d4ca', { arm: 30, armH: 66, legH: 2, seatH: 44, backD: 26, n: 3, round: 15, rollArm: true }),
+  sofa_hoi_pk4a:   { name: '布 Linsy 北歐實木 PK4A 211', cat: '沙發', w: 211, d: 80, h: 89, color: '#6f9a95', color2: '#c9a27a', build: o => woodFrameSofa(o, {}) },
+  sofa_hoi_s023:   sofaDef('布 Linsy 北歐雙色 S023 216', 216, 86, 81, '#d8c39b', '#efe6d4', { arm: 16, armH: 60, legH: 14, seatH: 44, backD: 16, n: 3, round: 8, twoTone: true }),
+  sofa_hoi_tbs380: sofaDef('布 Linsy 北歐高背 TBS380 220', 220, 96, 88, '#cdbfa9', '#2b2b2b', { arm: 14, armH: 62, legH: 12, seatH: 44, backD: 16, n: 3, round: 9, metalLeg: true }),
+  sofa_hoi_bs636:  sofaDef('布 Linsy 北歐高背 BS636 214', 214, 106, 88, '#efebe3', '#d9d4ca', { arm: 28, armH: 64, legH: 2, seatH: 43, backD: 24, n: 3, round: 14, rollArm: true }),
+  sofa_hoi_bs692:  sofaDef('布 Linsy 海風雪尼爾 BS692 215', 215, 95, 86, '#f1ece0', '#3a3a3a', { arm: 22, armH: 62, legH: 6, seatH: 44, backD: 18, n: 3, round: 12, rollArm: true }),
+  sofa_hoi_nuan:   sofaDef('布 hoi! 暖暖 可調頭枕 212', 212, 116, 98, '#a7a39c', '#2b2b2b', { arm: 18, armH: 62, legH: 6, seatH: 44, backD: 20, n: 3, round: 10, headrest: true }),
+  sofa_hoi_c503:   { name: '布 YW 知覓寬扶手橡木 C503 219', cat: '沙發', w: 219, d: 80, h: 88, color: '#7a6656', color2: '#c9a27a', build: o => woodFrameSofa(o, { wideArm: true }) },
+  sofa_hoi_ps739:  sofaDef('皮 Linsy 帆船牛皮 PS739 221', 221, 104, 90, '#a86a35', '#5a3d28', { arm: 20, armH: 62, legH: 10, seatH: 44, backD: 20, n: 3, leather: true, round: 11, rollArm: true }),
+  sofa_hoi_s03140: sofaDef('皮 YW 日暮全真皮 S03140 218', 218, 98, 97, '#a65f2c', '#3a2a1e', { arm: 22, armH: 66, legH: 10, seatH: 45, backD: 20, n: 3, leather: true, round: 9, rollArm: true }),
+  sofa_hoi_s0158:  sofaDef('布 YW 有伴可調頭枕 S0158 218', 218, 108, 69, '#e7e2d8', '#2b2b2b', { arm: 16, armH: 58, legH: 4, seatH: 42, backD: 18, n: 3, round: 8, headrest: true }),
   sofa_curve:    { name: '弧形沙發', cat: '沙發', w: 240, d: 105, h: 75, color: '#e6ddcd', color2: '#6e4b2e', build: curvedSofa },
   // 布沙發
   sofa_kivik:      sofaDef('布 KIVIK 三人座', 228, 95, 83, '#c9c1b2', '#3a3a3a', { arm: 24, armH: 64, legH: 3, seatH: 45, backD: 22, n: 3, round: 11, rollArm: true }),
