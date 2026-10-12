@@ -2,7 +2,7 @@
 
 依照實際尺寸平面圖（1/40）建立的 3D 户型，可以在瀏覽器裡自由擺放家具。
 
-**線上版：** https://leonsheep0612.github.io/floorplan-3d/
+**線上版：** https://muji-floorplan.netlify.app （舊網址 https://leonsheep0612.github.io/floorplan-3d/ ）
 
 ## 功能
 
