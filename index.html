@@ -6,7 +6,7 @@
 <title>無印風公寓 3D 擺設</title>
 <meta name="description" content="依平面圖建立的 3D 户型，可自由擺放、移動、旋轉家具。">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='3' width='26' height='26' rx='3' fill='%23f3f0ea' stroke='%2356575a' stroke-width='3'/%3E%3Cpath d='M16 3v14h13M3 19h8' stroke='%2356575a' stroke-width='3' fill='none'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="css/style.css?v=12">
+<link rel="stylesheet" href="css/style.css?v=13">
 <script type="importmap">
 { "imports": {
   "three": "./vendor/three/build/three.module.js",
@@ -157,6 +157,25 @@
   </div>
 </section>
 
+<!-- 手機：選取家具後的移動列 -->
+<section id="moveBar" class="move-bar" aria-label="移動家具">
+  <div class="mb-head">
+    <b id="mbName"></b>
+    <button id="mbStep" class="btn" type="button" title="每按一下移動的距離">每步 5cm</button>
+    <button id="mbMore" class="btn" type="button">尺寸・顏色</button>
+    <button id="mbClose" class="icon-btn" type="button" aria-label="取消選取"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div class="mb-pad">
+    <button id="mbRotL" class="mb-btn" type="button" aria-label="逆時針轉 90°">⟲</button>
+    <button class="mb-btn" type="button" data-mv="l" aria-label="往左">◀</button>
+    <button class="mb-btn" type="button" data-mv="u" aria-label="往上">▲</button>
+    <button class="mb-btn" type="button" data-mv="d" aria-label="往下">▼</button>
+    <button class="mb-btn" type="button" data-mv="r" aria-label="往右">▶</button>
+    <button id="mbRotR" class="mb-btn" type="button" aria-label="順時針轉 90°">⟳</button>
+    <button id="mbDup" class="mb-btn small" type="button" aria-label="複製">複製</button>
+  </div>
+</section>
+
 <section id="paintPanel" class="paint-panel" aria-label="牆面油漆">
   <div class="props-head">
     <div><b class="pp-title">🖌 牆面油漆</b><small>選好顏色與漆種，點畫面中的牆面即可套用</small></div>
@@ -232,7 +251,7 @@
         <li><b>看整體</b>：滑鼠左鍵拖曳旋轉、右鍵拖曳平移、滾輪縮放。手機用單指旋轉、雙指縮放與平移。</li>
         <li><b>移動家具</b>：直接按住家具拖曳到想要的位置。</li>
         <li><b>新增家具</b>：從左側「家具庫」點一下或拖進畫面（手機點左上角 ☰ 打開）。</li>
-        <li><b>調整</b>：點選家具後，右側（手機在下方）會出現面板，可改尺寸、顏色、旋轉。</li>
+        <li><b>調整</b>：點選家具後，右側會出現面板，可改尺寸、顏色、旋轉。手機會在下方出現 <b>移動列</b>：用 ◀ ▲ ▼ ▶ 移動（按住可連續移動）、⟲ ⟳ 轉 90°，按「尺寸・顏色」才展開完整面板。</li>
       </ol>
       <p class="tip">所有修改都會自動存在這個瀏覽器，不用按儲存。</p>
     </article>
@@ -265,6 +284,7 @@
       <p><b>懸空電視櫃</b>（客廳分類）預設離地 25cm，灰色抽屜面板、中間是開放木格；<b>吊燈</b>（燈具分類）掛在天花板，電線會隨高度自動調整。兩者都用屬性面板的「離地」調高低，「顏色」改面板、「配色」改木作外框。</p>
       <h4>移動與對齊</h4>
       <p>按住拖曳即可移動，會自動吸附 5cm 格線並貼齊牆面。想自由擺放時，取消上方的「吸附」。用方向鍵可微調 5cm（加 Shift 為 1cm）。</p>
+      <p><b>手機</b>：家具很小時，點在家具旁邊也會選到最近的那一件。選取後用下方移動列的箭頭移動，▲ 永遠是畫面上方的方向；「每步 5cm」可切換 1／5／10／30cm。建議切到「平面」視角移動最準。</p>
       <h4>屬性面板</h4>
       <ul>
         <li><b>名稱</b>：點標題可改名，例如「媽媽的書桌」。</li>
@@ -370,6 +390,6 @@
 <div id="toast" class="toast" role="status"></div>
 <div class="loading" id="loading"><span></span>載入 3D 場景…</div>
 
-<script type="module" src="js/main.js?v=12"></script>
+<script type="module" src="js/main.js?v=13"></script>
 </body>
 </html>

@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
-import * as P from './plan.js?v=12';
-import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=12';
+import * as P from './plan.js?v=13';
+import { CATALOG, CATEGORIES, CEIL_H, buildFurniture, mat } from './furniture.js?v=13';
 
 const $ = s => document.querySelector(s);
 const $$ = s => [...document.querySelectorAll(s)];
@@ -570,12 +570,14 @@ function updateUndo() { $('#btnUndo').disabled = hIndex <= 0; $('#btnRedo').disa
 // ── 選取與屬性面板 ───────────────────────────────────────
 const panel = $('#props');
 function select(id) {
+  if (id !== selId) setPropsOpen(false);
   selId = id;
   buildSelHelper();
   const it = items.find(i => i.id === id);
   document.body.classList.toggle('has-sel', !!it);
   if (!it) return;
   const def = CATALOG[it.type];
+  $('#mbName').textContent = it.name || def.name;
   $('#pName').value = it.name || def.name;
   $('#pType').textContent = def.name;
   $('#pW').value = Math.round(it.w); $('#pD').value = Math.round(it.d); $('#pH').value = Math.round(it.h);
@@ -657,7 +659,7 @@ $('#pStyle').addEventListener('change', e => {
   }, true);
   select(selId); commit();
 });
-$('#pName').addEventListener('change', e => { updateSel(it => it.name = e.target.value.trim() || CATALOG[it.type].name); commit(); });
+$('#pName').addEventListener('change', e => { updateSel(it => it.name = e.target.value.trim() || CATALOG[it.type].name); $('#mbName').textContent = selItem().name; commit(); });
 for (const [id, key, min] of [['#pW', 'w', 5], ['#pD', 'd', 1], ['#pH', 'h', 1]]) {
   $(id).addEventListener('change', e => {
     const v = Math.max(min, Math.min(1000, +e.target.value || min));
@@ -690,7 +692,49 @@ $('#pRotL').onclick = () => rotateSel(-90);
 $('#pRotR').onclick = () => rotateSel(90);
 $('#pDup').onclick = duplicateSel;
 $('#pDel').onclick = deleteSel;
-$('#pClose').onclick = () => select(null);
+$('#pClose').onclick = () => document.body.classList.contains('props-open') ? setPropsOpen(false) : select(null);
+
+// ── 手機移動列 ───────────────────────────────────────────
+// 手機上選取家具時先顯示精簡的移動列，按「尺寸・顏色」才展開完整屬性面板
+function setPropsOpen(on) { document.body.classList.toggle('props-open', !!on); }
+const STEPS = [1, 5, 10, 30];
+let mbStep = 5;
+$('#mbStep').onclick = () => { mbStep = STEPS[(STEPS.indexOf(mbStep) + 1) % STEPS.length]; $('#mbStep').textContent = `每步 ${mbStep}cm`; };
+$('#mbMore').onclick = () => setPropsOpen(true);
+$('#mbClose').onclick = () => select(null);
+$('#mbRotL').onclick = () => rotateSel(-90);
+$('#mbRotR').onclick = () => rotateSel(90);
+$('#mbDup').onclick = duplicateSel;
+// 方向依目前視角：▲ 永遠是畫面上方（取最接近的水平軸）
+function screenAxes() {
+  if (mode === 'top') return { up: [0, -1], right: [1, 0] };
+  const f = new THREE.Vector3(); cam.getWorldDirection(f);
+  const up = Math.abs(f.x) > Math.abs(f.z) ? [Math.sign(f.x), 0] : [0, Math.sign(f.z) || -1];
+  return { up, right: [-up[1], up[0]] };
+}
+function nudgeSel(dir) {
+  const it = selItem(); if (!it) return;
+  const { up, right } = screenAxes();
+  const v = { u: up, d: [-up[0], -up[1]], r: right, l: [-right[0], -right[1]] }[dir];
+  it.x = round1(clampX(it.x + v[0] * mbStep)); it.z = round1(clampZ(it.z + v[1] * mbStep));
+  placeObj(it); syncHelper(); showCoords(it);
+}
+// 按住連續移動
+let mvT = null;
+function mvStop() {
+  if (!mvT) return;
+  clearTimeout(mvT.t); clearInterval(mvT.i); mvT = null;
+  hideCoords(); commit();
+}
+$$('#moveBar [data-mv]').forEach(b => {
+  b.addEventListener('pointerdown', e => {
+    e.preventDefault(); mvStop();
+    const dir = b.dataset.mv; nudgeSel(dir);
+    mvT = { t: setTimeout(() => { mvT.i = setInterval(() => nudgeSel(dir), 80); }, 350) };
+  });
+  for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, mvStop);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
 
 // ── 拖曳互動 ─────────────────────────────────────────────
 const ray = new THREE.Raycaster();
@@ -705,6 +749,14 @@ function pick(e) {
   setRay(e);
   const hit = ray.intersectObjects(furnRoot.children.filter(g => g.visible), true).find(h => h.object.userData.fid);
   return hit ? hit.object.userData.fid : null;
+}
+// 手指點不準：從點擊處往外一圈圈找最近的家具（只用於點選，不用於拖曳）
+function pickNear(e) {
+  for (let r = 6; r <= 30; r += 6) for (let a = 0; a < 12; a++) {
+    const id = pick({ clientX: e.clientX + r * Math.cos(a * Math.PI / 6), clientY: e.clientY + r * Math.sin(a * Math.PI / 6) });
+    if (id) return id;
+  }
+  return null;
 }
 function floorPoint(e) {
   setRay(e);
@@ -782,7 +834,7 @@ window.addEventListener('pointerup', e => {
   }
   if (down && e.target === renderer.domElement && mode !== 'walk') {
     const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y);
-    if (moved < 5 && e.button === 0 && !pick(e)) select(null);
+    if (moved < 8 && e.button === 0 && !pick(e)) select(e.pointerType === 'mouse' ? null : pickNear(e));
   }
   down = null;
 });
