@@ -926,14 +926,35 @@ function drapes(g, w, h, d, z, m, open, lining) {
   }
 }
 // 一紗一布：後層白紗（常關）、前層布簾
-function curtainSheer({ w, d, h, color, color2, open }) {
+function curtainSheer({ w, d, h, color, color2, open }, fabric = mat(color, { r: 0.95, ds: true })) {
   const g = new THREE.Group();
   curtainTrack(g, w, h, d);
   const sheer = new THREE.MeshStandardMaterial({ color: color2, transparent: true, opacity: 0.42, roughness: 0.9, side: THREE.DoubleSide, depthWrite: false });
   const sp = wavePanel(w, h - 6, sheer, 2.2, 9); sp.position.set(0, (h - 6) / 2, -d / 2 + 4); g.add(sp);
-  drapes(g, w, h, d, d / 2 - 4, mat(color, { r: 0.95, ds: true }), open ?? 70);
+  drapes(g, w, h, d, d / 2 - 4, fabric, open ?? 70);
   return g;
 }
+// 麂皮紋布料：細絨斑駁的明暗紋理，以布色染色
+function suedeMat(color, w, h) {
+  const tex = canvasTexture('suede', 256, 256, (x, W, H) => {
+    const rnd = seeded(7);
+    x.fillStyle = '#ffffff'; x.fillRect(0, 0, W, H);
+    for (let i = 0; i < 90; i++) {
+      const r = 10 + rnd() * 30, cx = rnd() * W, cy = rnd() * H, gr = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+      const a = 0.05 + rnd() * 0.07, tone = rnd() < 0.5 ? '0,0,0' : '255,255,255';
+      gr.addColorStop(0, `rgba(${tone},${a})`); gr.addColorStop(1, `rgba(${tone},0)`);
+      x.fillStyle = gr; x.fillRect(cx - r, cy - r, r * 2, r * 2);
+    }
+    for (let i = 0; i < 9000; i++) {
+      x.fillStyle = `rgba(0,0,0,${0.03 + rnd() * 0.08})`;
+      x.fillRect(rnd() * W, rnd() * H, 1, 1 + rnd() * 2);
+    }
+  });
+  const t = tex.clone(); t.needsUpdate = true;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(Math.max(1, w / 40), Math.max(1, h / 40));
+  return new THREE.MeshStandardMaterial({ color, map: t, roughness: 1, side: THREE.DoubleSide });
+}
+const curtainSuede = o => curtainSheer(o, suedeMat(o.color, o.w / 2, o.h));
 // 全遮光：布簾＋背面遮光內襯
 function curtainBlackout({ w, d, h, color, color2, open }) {
   const g = new THREE.Group();
@@ -1228,6 +1249,7 @@ export const CATALOG = {
   rug_round:     { name: '圓地毯', cat: '地毯', w: 120, d: 120, h: 1, color: '#c8b59a', build: rugRound },
   // 窗簾（open＝拉開程度 0–100）
   curtain_sheer:   { name: '一紗一布窗簾', cat: '窗簾', w: 200, d: 15, h: 270, open: 70, openable: true, color: '#cfc6b6', color2: '#fbfaf6', build: curtainSheer },
+  curtain_suede:   { name: '一紗一布（麂皮紋）', cat: '窗簾', w: 200, d: 15, h: 270, open: 70, openable: true, color: '#d8c9b0', color2: '#fbfaf6', build: curtainSuede },
   curtain_blackout:{ name: '全遮光窗簾', cat: '窗簾', w: 200, d: 15, h: 270, open: 30, openable: true, color: '#8f8a83', color2: '#f1efea', build: curtainBlackout },
   curtain_reeded:  { name: '全遮光＋長虹玻璃貼', cat: '窗簾', w: 200, d: 15, h: 270, open: 40, openable: true, color: '#8f8a83', color2: '#f1efea', build: curtainBlackoutReeded },
   zebra_blind:     { name: '調光簾（斑馬簾）', cat: '窗簾', w: 160, d: 12, h: 220, open: 0, openable: true, color: '#e6e1d8', build: zebraBlind },

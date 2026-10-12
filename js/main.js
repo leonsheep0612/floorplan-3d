@@ -554,7 +554,7 @@ function commit(save = true) {
   updatePlanState();
 }
 function persist() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 6, items })); } catch { /* 私密模式等 */ }
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ v: 7, items })); } catch { /* 私密模式等 */ }
 }
 function restore(i) {
   hIndex = i;
@@ -1401,6 +1401,11 @@ async function init() {
       }
       // v6 加入窗簾（客廳一紗一布、主臥全遮光）
       if ((s.v || 1) < 6 && !list.some(it => CATALOG[it.type].cat === '窗簾')) list.push(...defaultLayout().filter(it => CATALOG[it.type].cat === '窗簾'));
+      // v7 客廳窗簾拆成兩組：靠電視落地窗一紗一布（麂皮紋）、書房窗遮光（米灰）
+      if ((s.v || 1) < 7) {
+        const old = list.find(it => it.type === 'curtain_sheer' && it.w >= 400);
+        if (old) list.splice(list.indexOf(old), 1, ...defaultLayout().filter(it => it.type === 'curtain_suede' || (it.type === 'curtain_blackout' && it.name.startsWith('書房'))));
+      }
       // v4 衣櫃改為開放式，並加入人形身高參考
       if ((s.v || 1) < 4) {
         const dl = defaultLayout();

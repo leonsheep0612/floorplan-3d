@@ -79,18 +79,17 @@ export const DEFAULT_LAYOUT = [
   { t: 'plant', c: [882, 478] },
   { t: 'cabinet_tall', c: [449, 605], rot: 90, w: 365, d: 45, name: '餐廳收納高櫃', color: '#b9b6b0' },
   { t: 'shoe_cabinet', c: [365, 746], w: 150, d: 40, h: 215, name: '玄關櫃' },
-  { t: 'shelf_thin', c: [646, 645], rot: -90, w: 260, name: '展示薄櫃' },
   { t: 'dining_table', c: [522, 650] },
   { t: 'pendant', c: [522, 650], name: '餐廳吊燈' },
-  // 窗簾：客廳一紗一布（覆蓋陽台落地窗與窗戶）、主臥全遮光
-  { t: 'curtain_sheer', c: [695, 187.5], w: 430, name: '客廳窗簾（一紗一布）' },
+  // 窗簾：客廳靠電視的落地窗一紗一布（米色麂皮紋）、後方書房窗全遮光（米色帶灰）、主臥全遮光
+  { t: 'curtain_suede', c: [587.5, 187.5], w: 210, name: '客廳窗簾（一紗一布・麂皮紋）' },
+  { t: 'curtain_blackout', c: [830, 187.5], w: 150, color: '#bdb5a9', color2: '#f1efea', name: '書房窗簾（遮光・米灰）' },
   { t: 'curtain_blackout', c: [1040, 187.5], w: 200, name: '主臥窗簾（全遮光）' },
-  // 天花板軌道燈（客廳方框、餐廚一條、主臥一條）
+  // 天花板軌道燈（客廳方框、主臥一條）
   { t: 'track_light', c: [670, 240], w: 360 },
   { t: 'track_light', c: [670, 450], w: 360 },
   { t: 'track_light', c: [514, 345], rot: 90, w: 240 },
   { t: 'track_light', c: [826, 345], rot: 90, w: 240 },
-  { t: 'track_light', c: [600, 710], rot: 90, w: 340 },
   { t: 'track_light', c: [1060, 250], w: 220 },
   { t: 'chair', c: [497, 612] },
   { t: 'chair', c: [547, 612] },
