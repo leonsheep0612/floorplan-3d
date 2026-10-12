@@ -27,7 +27,7 @@
 python -m http.server 8000
 ```
 
-然後開啟 http://localhost:8000 。Three.js 透過 jsDelivr CDN 載入。
+然後開啟 http://localhost:8000 。Three.js r160 已放在 `vendor/three/`，不需連外部 CDN。
 
 ## 結構
 
